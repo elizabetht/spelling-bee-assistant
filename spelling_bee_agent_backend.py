@@ -17,6 +17,8 @@ from pathlib import Path
 from urllib import request, error
 from typing import List, Optional
 from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from PIL import Image
@@ -73,6 +75,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+UI_DIR = Path("ui")
+if UI_DIR.exists():
+    app.mount("/ui", StaticFiles(directory=str(UI_DIR)), name="ui")
 
 # Redis setup for Langchain memory
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -271,6 +277,19 @@ async def upload_image(file: UploadFile = File(...)):
         "sample": words[:10],
         "next": "Connect websocket at /pipecat/ws?session_id=<session_id>",
     }
+
+
+@app.get("/healthz")
+async def healthz():
+    return {"status": "ok", "pipecat_available": PIPECAT_AVAILABLE}
+
+
+@app.get("/")
+async def home():
+    index_file = UI_DIR / "index.html"
+    if index_file.exists():
+        return FileResponse(str(index_file))
+    raise HTTPException(status_code=404, detail="UI not found")
 
 
 if PIPECAT_AVAILABLE:

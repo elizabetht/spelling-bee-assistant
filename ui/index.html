@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spelling Bee Assistant</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 2rem; max-width: 720px; }
+      .card { border: 1px solid #ddd; border-radius: 8px; padding: 1rem; margin-top: 1rem; }
+      button { padding: 0.5rem 0.9rem; }
+      code, pre { background: #f5f5f5; padding: 0.2rem 0.4rem; border-radius: 4px; }
+      .muted { color: #666; }
+      .ok { color: #0a7d2b; }
+      .err { color: #b00020; }
+    </style>
+  </head>
+  <body>
+    <h1>Spelling Bee Assistant</h1>
+    <p class="muted">Upload a spelling word-list image and get a session ID for Pipecat.</p>
+
+    <div class="card">
+      <h3>1) Backend status</h3>
+      <button id="checkHealth">Check /healthz</button>
+      <p id="healthOut" class="muted"></p>
+    </div>
+
+    <div class="card">
+      <h3>2) Upload image</h3>
+      <input type="file" id="imageFile" accept="image/*" />
+      <button id="uploadBtn">Upload</button>
+      <p id="uploadStatus" class="muted"></p>
+      <pre id="uploadJson"></pre>
+    </div>
+
+    <div class="card">
+      <h3>3) Connect Pipecat</h3>
+      <p>WebSocket URL:</p>
+      <code id="wsUrl">(upload first)</code>
+      <p class="muted">Use this URL in your Pipecat/voice client.</p>
+    </div>
+
+    <script>
+      const healthOut = document.getElementById('healthOut');
+      const uploadStatus = document.getElementById('uploadStatus');
+      const uploadJson = document.getElementById('uploadJson');
+      const wsUrl = document.getElementById('wsUrl');
+
+      document.getElementById('checkHealth').addEventListener('click', async () => {
+        healthOut.textContent = 'Checking...';
+        try {
+          const res = await fetch('/healthz');
+          const data = await res.json();
+          healthOut.className = 'ok';
+          healthOut.textContent = `OK: ${JSON.stringify(data)}`;
+        } catch (err) {
+          healthOut.className = 'err';
+          healthOut.textContent = `Failed: ${err}`;
+        }
+      });
+
+      document.getElementById('uploadBtn').addEventListener('click', async () => {
+        const fileInput = document.getElementById('imageFile');
+        if (!fileInput.files.length) {
+          uploadStatus.className = 'err';
+          uploadStatus.textContent = 'Please choose an image file first.';
+          return;
+        }
+
+        uploadStatus.className = 'muted';
+        uploadStatus.textContent = 'Uploading...';
+        uploadJson.textContent = '';
+
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+
+        try {
+          const res = await fetch('/upload-image', { method: 'POST', body: formData });
+          const data = await res.json();
+
+          if (!res.ok) {
+            uploadStatus.className = 'err';
+            uploadStatus.textContent = `Upload failed (${res.status})`;
+            uploadJson.textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+
+          uploadStatus.className = 'ok';
+          uploadStatus.textContent = 'Upload succeeded.';
+          uploadJson.textContent = JSON.stringify(data, null, 2);
+
+          const sessionId = data.session_id;
+          const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+          wsUrl.textContent = `${protocol}//${location.host}/pipecat/ws?session_id=${sessionId}`;
+        } catch (err) {
+          uploadStatus.className = 'err';
+          uploadStatus.textContent = `Upload failed: ${err}`;
+        }
+      });
+    </script>
+  </body>
+</html>
