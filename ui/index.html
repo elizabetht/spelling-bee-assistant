@@ -485,32 +485,50 @@ registerProcessor('capture-processor', CaptureProcessor);
     // ===================== Score parsing from bot text =====================
     function parseScoreFromText(text) {
       if (!text) return;
-      const lower = text.toLowerCase();
 
-      // Detect correct/incorrect
-      if (/\bthat'?s\s+(right|correct)\b/i.test(text) ||
+      // Detect correct
+      if (/\bcorrect\b/i.test(text) && !/\bincorrect\b/i.test(text) && !/\bnot\s+(quite\s+)?correct\b/i.test(text) ||
+          /\bthat'?s\s+(right|correct)\b/i.test(text) ||
           /\bwell\s+done\b/i.test(text) ||
-          /\bgreat\s+(job|spelling)\b/i.test(text) ||
+          /\bgreat\s+(job|spelling|work)\b/i.test(text) ||
           /\bperfect\b/i.test(text) ||
-          /\byou\s+spelled\s+it\s+(correctly|right)\b/i.test(text) ||
-          /\bcorrect!\b/i.test(text)) {
+          /\byou\s+(got|spelled|nailed)\s+it/i.test(text) ||
+          /\bnice\s+(job|work|spelling)\b/i.test(text) ||
+          /\bexactly\s*(right|!|\.)/i.test(text) ||
+          /\bawesome\b/i.test(text) ||
+          /\bexcellent\b/i.test(text)) {
         scoreCorrect++;
         updateScoreUI();
-      } else if (/\bnot\s+quite\b/i.test(text) ||
-                 /\bthat'?s\s+not\s+(right|correct)\b/i.test(text) ||
-                 /\bincorrect\b/i.test(text) ||
-                 /\bnot\s+the\s+right\s+spelling\b/i.test(text) ||
-                 /\blet'?s\s+try\s+(again|that\s+again)\b/i.test(text) ||
-                 /\bthe\s+correct\s+spelling\s+is\b/i.test(text)) {
+      } else if (/\bincorrect\b/i.test(text) ||
+                 /\bnot\s+(quite|right|correct)\b/i.test(text) ||
+                 /\blet'?s\s+try\s+(again|that)\b/i.test(text) ||
+                 /\bthe\s+correct\s+spelling\s+is\b/i.test(text) ||
+                 /\bspelled\s+(it\s+)?wrong/i.test(text) ||
+                 /\boops\b/i.test(text) ||
+                 /\bnot\s+the\s+right\b/i.test(text) ||
+                 /\bclose,?\s+but\b/i.test(text) ||
+                 /\balmost\b/i.test(text)) {
         scoreIncorrect++;
         updateScoreUI();
       }
 
-      // Detect current word: "spell the word X" or "next word is X" or "your word is X"
-      const wordMatch = text.match(/(?:spell(?:\s+the\s+word)?|next\s+word\s+is|your\s+word\s+is|the\s+word\s+is)[:\s]+["']?(\w+)["']?/i);
-      if (wordMatch) {
-        currentWord = wordMatch[1].toLowerCase();
-        updateScoreUI();
+      // Detect current word — match many announcement patterns
+      const wordPatterns = [
+        /(?:first|next|new|your)\s+word\s+is[:\s]+["']?(\w+)["']?/i,
+        /\bthe\s+word\s+is[:\s]+["']?(\w+)["']?/i,
+        /\bspell(?:\s+the\s+word)?[:\s]+["']?(\w+)["']?/i,
+        /\bhere(?:'s|\s+is)\s+(?:your\s+)?(?:next\s+)?word[:\s]+["']?(\w+)["']?/i,
+        /\bword\s+(?:number\s+)?\d+[:\s]+["']?(\w+)["']?/i,
+        /\btry\s+(?:to\s+)?spell[:\s]+["']?(\w+)["']?/i,
+        /\bcan\s+you\s+spell[:\s]+["']?(\w+)["']?/i,
+      ];
+      for (const pat of wordPatterns) {
+        const m = text.match(pat);
+        if (m && m[1] && m[1].length > 1) {
+          currentWord = m[1].toLowerCase();
+          updateScoreUI();
+          break;
+        }
       }
     }
 
@@ -635,8 +653,8 @@ registerProcessor('capture-processor', CaptureProcessor);
         source.connect(workletNode);
         // Don't connect worklet to destination (no feedback)
 
-        // Set up playback context
-        playbackCtx = new AudioContext({ sampleRate: 16000 });
+        // Set up playback context  (22kHz = Magpie TTS output rate)
+        playbackCtx = new AudioContext({ sampleRate: 22000 });
         nextPlayTime = 0;
 
         // Reset score
@@ -856,6 +874,7 @@ registerProcessor('capture-processor', CaptureProcessor);
           }
           botUtteranceBuffer += frame.text;
           updateTranscriptText(currentBotEntry, botUtteranceBuffer, true);
+          resetBotUtteranceTimer();
         } else if (frame.type === 'message') {
           // JSON messages (tts_update, tts_end, asr_update, asr_end, etc.)
           handleTranscriptMessage(frame.data);
@@ -873,6 +892,27 @@ registerProcessor('capture-processor', CaptureProcessor);
 
     // Buffer to accumulate full bot utterance for score parsing
     let botUtteranceBuffer = '';
+    let botUtteranceTimer = null;
+
+    // Parse bot utterance after 1.5s of no new text (bot finished speaking)
+    function resetBotUtteranceTimer() {
+      if (botUtteranceTimer) clearTimeout(botUtteranceTimer);
+      botUtteranceTimer = setTimeout(() => {
+        if (botUtteranceBuffer) {
+          parseScoreFromText(botUtteranceBuffer);
+          if (currentBotEntry) {
+            currentBotEntry.querySelector('.transcript-text').classList.remove('interim');
+            currentBotEntry = null;
+          }
+          botUtteranceBuffer = '';
+          isBotSpeaking = false;
+          if (!isMuted) {
+            micIndicator.className = 'mic-indicator listening';
+            statusLabel.textContent = 'Listening...';
+          }
+        }
+      }, 1500);
+    }
 
     function handleTranscriptMessage(msg) {
       const type = msg.type;
@@ -961,14 +1001,19 @@ registerProcessor('capture-processor', CaptureProcessor);
     function playAudioChunk(pcmBytes, sampleRate) {
       if (!playbackCtx) return;
 
-      // pcmBytes is a Uint8Array of raw int16 LE PCM
-      const numSamples = Math.floor(pcmBytes.length / 2);
+      let data = pcmBytes;
+      // Strip WAV header if present (44-byte RIFF header starts with 'RIFF')
+      if (data.length > 44 && data[0] === 0x52 && data[1] === 0x49 && data[2] === 0x46 && data[3] === 0x46) {
+        data = data.slice(44);
+      }
+
+      const numSamples = Math.floor(data.length / 2);
       if (numSamples <= 0) return;
 
       const rate = sampleRate || 16000;
       const audioBuffer = playbackCtx.createBuffer(1, numSamples, rate);
       const channelData = audioBuffer.getChannelData(0);
-      const view = new DataView(pcmBytes.buffer, pcmBytes.byteOffset, pcmBytes.byteLength);
+      const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
 
       for (let i = 0; i < numSamples; i++) {
         const sample = view.getInt16(i * 2, true);
@@ -1031,6 +1076,7 @@ registerProcessor('capture-processor', CaptureProcessor);
     });
 
     function cleanup() {
+      if (botUtteranceTimer) { clearTimeout(botUtteranceTimer); botUtteranceTimer = null; }
       if (micStream) {
         micStream.getTracks().forEach(t => t.stop());
         micStream = null;

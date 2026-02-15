@@ -39,27 +39,28 @@ except ImportError:
 
 try:
     from pipecat.audio.vad.silero import SileroVADAnalyzer
+    from pipecat.audio.vad.vad_analyzer import VADParams
     from pipecat.frames.frames import LLMMessagesFrame
     from pipecat.pipeline.pipeline import Pipeline
     from pipecat.pipeline.task import PipelineParams, PipelineTask
     from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
 
     from nvidia_pipecat.pipeline.ace_pipeline_runner import ACEPipelineRunner, PipelineMetadata
-    from nvidia_pipecat.processors.nvidia_context_aggregator import (
-        NvidiaTTSResponseCacher,
-        create_nvidia_context_aggregator,
-    )
+    from nvidia_pipecat.processors.nvidia_context_aggregator import create_nvidia_context_aggregator
     from nvidia_pipecat.processors.transcript_synchronization import (
         BotTranscriptSynchronization,
         UserTranscriptSynchronization,
     )
     from nvidia_pipecat.services.blingfire_text_aggregator import BlingfireTextAggregator
     from nvidia_pipecat.services.nvidia_llm import NvidiaLLMService
-    from nvidia_pipecat.services.riva_speech import RivaASRService, RivaTTSService
     from nvidia_pipecat.transports.network.ace_fastapi_websocket import ACETransport, ACETransportParams
     from nvidia_pipecat.transports.services.ace_controller.routers.websocket_router import (
         router as websocket_router,
     )
+
+    # Cloud-hosted ASR (ElevenLabs Scribe) + TTS (Riva Magpie via NVIDIA Cloud)
+    from pipecat.services.elevenlabs import ElevenLabsSTTService
+    from nvidia_pipecat.services.riva_speech import RivaTTSService
 
     PIPECAT_AVAILABLE = True
 except ImportError:
@@ -308,8 +309,19 @@ if PIPECAT_AVAILABLE:
         transport = ACETransport(
             websocket=pipeline_metadata.websocket,
             params=ACETransportParams(
-                vad_analyzer=SileroVADAnalyzer(),
-                audio_out_10ms_chunks=20,
+                audio_in_enabled=True,
+                audio_out_enabled=True,
+                audio_in_sample_rate=16000,
+                audio_out_sample_rate=16000,
+                add_wav_header=False,
+                vad_analyzer=SileroVADAnalyzer(
+                    params=VADParams(
+                        confidence=0.8,
+                        start_secs=0.3,
+                        stop_secs=1.0,
+                        min_volume=0.7,
+                    )
+                ),
             ),
         )
 
@@ -320,12 +332,11 @@ if PIPECAT_AVAILABLE:
             text_aggregator=BlingfireTextAggregator(),
         )
 
-        stt = RivaASRService(
-            server=os.getenv("RIVA_ASR_URL", "grpc.nvcf.nvidia.com:443"),
-            api_key=os.getenv("NVIDIA_API_KEY"),
-            language=os.getenv("RIVA_ASR_LANGUAGE", "en-US"),
+        stt = ElevenLabsSTTService(
+            api_key=os.getenv("ELEVENLABS_API_KEY"),
+            model="scribe_v1",
+            language="en",
             sample_rate=16000,
-            model=os.getenv("RIVA_ASR_MODEL", "parakeet-1.1b-en-US-asr-streaming-silero-vad-sortformer"),
         )
 
         tts = RivaTTSService(
@@ -369,8 +380,7 @@ if PIPECAT_AVAILABLE:
         ]
 
         context = OpenAILLMContext(messages)
-        context_aggregator = create_nvidia_context_aggregator(context, send_interims=True)
-        tts_response_cacher = NvidiaTTSResponseCacher()
+        context_aggregator = create_nvidia_context_aggregator(context, send_interims=False)
 
         pipeline = Pipeline(
             [
@@ -380,7 +390,6 @@ if PIPECAT_AVAILABLE:
                 context_aggregator.user(),
                 llm,
                 tts,
-                tts_response_cacher,
                 tts_transcript_synchronization,
                 transport.output(),
                 context_aggregator.assistant(),
@@ -390,7 +399,7 @@ if PIPECAT_AVAILABLE:
         task = PipelineTask(
             pipeline,
             params=PipelineParams(
-                allow_interruptions=True,
+                allow_interruptions=False,
                 enable_metrics=True,
                 enable_usage_metrics=True,
                 send_initial_empty_metrics=True,

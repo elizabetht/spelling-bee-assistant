@@ -36,10 +36,19 @@ spec:
               value: "http://vllm-nemotron-nano-vl-8b:5566/v1"
             - name: NVIDIA_LLM_MODEL
               value: "nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-FP8"
-            - name: RIVA_ASR_URL
-              value: "grpc.nvcf.nvidia.com:443"
+            - name: ELEVENLABS_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: elevenlabs-api-key
+                  key: api-key
             - name: RIVA_TTS_URL
               value: "grpc.nvcf.nvidia.com:443"
+            - name: RIVA_TTS_VOICE_ID
+              value: "Magpie-Multilingual.EN-US.Sofia"
+            - name: RIVA_TTS_MODEL
+              value: "magpie_tts_ensemble-Magpie-Multilingual"
+            - name: RIVA_TTS_LANGUAGE
+              value: "en-US"
             - name: NVIDIA_API_KEY
               valueFrom:
                 secretKeyRef:

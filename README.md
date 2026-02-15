@@ -28,8 +28,8 @@ Students upload a photo of their spelling word list, and the assistant extracts 
 │   │  1. Decode image   │         │  Pipecat ACE Pipeline            │     │
 │   │  2. Extract words  │         │  ┌─────────────────────────────┐ │     │
 │   │     via VLM        │         │  │                             │ │     │
-│   │  3. Store in Redis │         │  │  Audio In ──► Riva ASR      │ │     │
-│   │  4. Return         │         │  │                 │            │ │     │
+│   │  3. Store in Redis │         │  │  Audio In ──► ElevenLabs   │ │     │
+│   │  4. Return         │         │  │              ASR (Scribe)   │ │     │
 │   │     session_id     │         │  │                 ▼            │ │     │
 │   │                    │         │  │         NeMo Guardrails      │ │     │
 │   └────────┬───────────┘         │  │                 │            │ │     │
@@ -38,8 +38,8 @@ Students upload a photo of their spelling word list, and the assistant extracts 
 │            │                     │  │       (Spelling Coach)       │ │     │
 │            │                     │  │                 │            │ │     │
 │            │                     │  │                 ▼            │ │     │
-│            │                     │  │           Riva TTS           │ │     │
-│            │                     │  │                 │            │ │     │
+│            │                     │  │           Riva TTS            │ │     │
+│            │                     │  │         (Magpie Cloud)        │ │     │
 │            │                     │  │                 ▼            │ │     │
 │            │                     │  │           Audio Out          │ │     │
 │            │                     │  │                             │ │     │
@@ -57,14 +57,13 @@ Students upload a photo of their spelling word list, and the assistant extracts 
 ┌────────────────────────────────────────────────────────────────────────────┐
 │                          NVIDIA AI Services                                │
 │                                                                            │
-│   ┌──────────────────┐  ┌──────────────┐  ┌────────────────────────────┐  │
 │   ┌───────────────────────────┐  ┌──────────────┐  ┌──────────────────┐  │
-│   │  Nemotron-Nano-12B-VL-FP8     │  │  Riva ASR    │  │  Riva TTS        │  │
-│   │  (vLLM, self-hosted)     │  │  Parakeet    │  │  Magpie Sofia    │  │
-│   │                          │  │  1.1B        │  │                  │  │
-│   │  Image → Words           │  │  Speech →    │  │  Text → Speech   │  │
-│   │  Definitions / Sentences │  │  Text        │  │                  │  │
-│   │  Voice Coach LLM         │  │              │  │                  │  │
+│   │  Nemotron-Nano-12B-VL-FP8│  │ ElevenLabs   │  │ Riva TTS         │  │
+│   │  (vLLM, self-hosted)     │  │ STT (Scribe) │  │ Magpie (NVIDIA   │  │
+│   │                          │  │ (cloud API)  │  │ Cloud)           │  │
+│   │  Image → Words           │  │ Speech →     │  │                  │  │
+│   │  Definitions / Sentences │  │ Text         │  │  Text → Speech   │  │
+│   │  Voice Coach LLM         │  │              │  │  16kHz PCM       │  │
 │   └───────────────────────────┘  └──────────────┘  └──────────────────┘  │
 │                                                                            │
 │   ┌──────────────────────────────────────────────────────────────────┐  │
@@ -80,8 +79,8 @@ Students upload a photo of their spelling word list, and the assistant extracts 
 |---|---|---|
 | **Voice Pipeline** | NVIDIA Pipecat (ACE) | Orchestrates real-time audio I/O, ASR, LLM, and TTS |
 | **Vision-Language Model** | Nemotron-Nano-12B-VL-FP8 via vLLM | Extracts spelling words from uploaded images |
-| **Speech Recognition** | Riva ASR (Parakeet 1.1B) | Streaming speech-to-text with VAD |
-| **Text-to-Speech** | Riva TTS (Magpie Sofia) | Natural voice output for the spelling coach |
+| **Speech Recognition** | ElevenLabs STT (Scribe, cloud API) | Streaming speech-to-text via WebSocket |
+| **Text-to-Speech** | Riva TTS / Magpie (NVIDIA Cloud) | Natural voice output at 16kHz via gRPC |
 | **Conversational LLM** | Nemotron-Nano-12B-VL-FP8 via vLLM | Powers the interactive spelling coach (same model as VLM) |
 | **Safety** | NeMo Guardrails | Enforces spelling-only scope, filters off-topic intent |
 | **Session Store** | Redis + LangChain | Persistent word lists, progress, and chat history |
@@ -143,17 +142,17 @@ Students upload a photo of their spelling word list, and the assistant extracts 
 │                                              │   └────────────────┘ │ │
 │                                              └──────────────────────┘ │
 │                                                                      │
-│   External (NVIDIA Cloud):                                           │
-│     • Riva ASR  → grpc.nvcf.nvidia.com:443                          │
-│     • Riva TTS  → grpc.nvcf.nvidia.com:443                          │
+│   External (Cloud APIs):                                             │
+│     • ElevenLabs ASR  → api.elevenlabs.io (Scribe v1)                │
+│     • Riva TTS        → grpc.nvcf.nvidia.com:443 (Magpie)           │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
 ## NVIDIA Technologies Used
 
 - **NVIDIA Pipecat (ACE)** — Real-time voice agent pipeline framework
-- **Riva ASR** — Automatic speech recognition (Parakeet 1.1B, streaming with Silero VAD)
-- **Riva TTS** — Text-to-speech synthesis (Magpie-Multilingual Sofia EN-US)
+- **ElevenLabs STT (Scribe)** — Cloud-hosted streaming speech-to-text (WebSocket API)
+- **Riva TTS (Magpie)** — Cloud-hosted text-to-speech via NVIDIA Cloud (grpc.nvcf.nvidia.com)
 - **Nemotron-Nano-12B-VL-FP8** — Vision-language model for image understanding and conversational coaching, served via vLLM
 - **NeMo Guardrails** — Programmable safety rails for topic enforcement and content filtering
 - **NVIDIA Container Runtime** — GPU-accelerated container execution
@@ -167,9 +166,8 @@ Students upload a photo of their spelling word list, and the assistant extracts 
 pip install -r requirements.txt
 
 # Set required environment variables
-export NVIDIA_API_KEY=<your-key>
-export RIVA_ASR_URL=grpc.nvcf.nvidia.com:443
-export RIVA_TTS_URL=grpc.nvcf.nvidia.com:443
+export NVIDIA_API_KEY=<your-key>          # For LLM + Riva TTS (NVIDIA Cloud)
+export ELEVENLABS_API_KEY=<your-key>      # For ElevenLabs ASR (Scribe)
 
 # Optional: enable guardrails
 export ENABLE_NEMO_GUARDRAILS=true
@@ -189,9 +187,13 @@ container registry at `localhost:32000`, and GPU nodes with the NVIDIA runtime.
 **1. Create secrets**
 
 ```bash
-# NVIDIA API key (required for Riva ASR/TTS)
+# NVIDIA API key (required for NvidiaLLMService + Riva TTS)
 kubectl -n spellingbee create secret generic nvidia-api-key \
   --from-literal=api-key=<YOUR_KEY>
+
+# ElevenLabs API key (required for ASR)
+kubectl -n spellingbee create secret generic elevenlabs-api-key \
+  --from-literal=api-key=<YOUR_ELEVENLABS_KEY>
 
 # HuggingFace token (required for vLLM model download)
 kubectl -n spellingbee create secret generic hf-token \
@@ -211,6 +213,9 @@ Or deploy individually:
 ./deploy/deploy_redis.sh      # Redis session store on controller node
 ./deploy/deploy_backend.sh    # FastAPI backend on controller node
 ```
+
+> **Note:** ASR and TTS are cloud-hosted (ElevenLabs + NVIDIA Cloud), so no
+> GPU pod for speech services is needed. Only the vLLM model requires a GPU.
 
 The backend script builds the Docker image, pushes it to the local registry,
 applies the K8s manifest, and waits for rollout. To create the NVIDIA API key
@@ -252,10 +257,14 @@ spelling-bee-assistant/
 ├── guardrails/
 │   ├── config.yml                  # NeMo Guardrails model config
 │   └── rails.co                    # Intent policies (spelling scope)
+├── services/                           # (unused — retained for local ASR/TTS fallback)
+│   ├── nvidia_websocket_stt.py         # Nemotron Speech ASR Pipecat adapter
+│   ├── magpie_websocket_tts.py         # Magpie TTS Pipecat adapter
+│   └── frames.py                       # Custom pipeline frame types
 ├── deploy/
 │   ├── spelling-bee-agent-backend.k8s.yaml  # K8s backend manifest
 │   ├── vllm-nemotron-nano-vl-8b.yaml        # K8s vLLM model manifest
-│   ├── redis.k8s.yaml                     # K8s Redis manifest
+│   ├── redis.k8s.yaml                       # K8s Redis manifest
 │   ├── deploy_all.sh               # Deploy model + Redis + backend
 │   ├── deploy_backend.sh           # Deploy backend only
 │   ├── deploy_model.sh             # Deploy vLLM model only
@@ -269,9 +278,12 @@ spelling-bee-assistant/
 
 | Variable | Default | Description |
 |---|---|---|
-| `NVIDIA_API_KEY` | — | NVIDIA API authentication (required) |
-| `RIVA_ASR_URL` | — | Riva ASR endpoint (required) |
-| `RIVA_TTS_URL` | — | Riva TTS endpoint (required) |
+| `NVIDIA_API_KEY` | — | NVIDIA API key (required for LLM + Riva TTS) |
+| `ELEVENLABS_API_KEY` | — | ElevenLabs API key (required for ASR) |
+| `RIVA_TTS_URL` | `grpc.nvcf.nvidia.com:443` | Riva TTS gRPC endpoint (NVIDIA Cloud) |
+| `RIVA_TTS_VOICE_ID` | `Magpie-Multilingual.EN-US.Sofia` | Riva TTS voice identifier |
+| `RIVA_TTS_MODEL` | `magpie_tts_ensemble-Magpie-Multilingual` | Riva TTS model name |
+| `RIVA_TTS_LANGUAGE` | `en-US` | Riva TTS language code |
 | `ENABLE_NEMO_GUARDRAILS` | `false` | Enable NeMo Guardrails |
 | `NEMO_GUARDRAILS_CONFIG_PATH` | `./guardrails` | Path to guardrails config |
 | `REDIS_URL` | `redis://localhost:6379/0` | Redis connection URL |

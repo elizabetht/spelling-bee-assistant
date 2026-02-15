@@ -1,0 +1,96 @@
+# Nemotron Speech ASR + Magpie TTS Deployment for microk8s
+# Deploys both services in a single pod on a DGX Spark GPU node.
+# ASR: nvidia/nemotron-speech-streaming-en-0.6b (WebSocket on port 8080)
+# TTS: nvidia/magpie_tts_multilingual_357m   (HTTP+WebSocket on port 8001)
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nemotron-speech-asr-tts
+  namespace: spellingbee
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: { app: nemotron-speech-asr-tts }
+  template:
+    metadata:
+      labels: { app: nemotron-speech-asr-tts }
+    spec:
+      runtimeClassName: nvidia
+      nodeSelector:
+        nvidia.com/gpu.product: NVIDIA-GB10
+      containers:
+        - name: asr-tts
+          image: localhost:32000/nemotron-speech-asr-tts:0.1
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: asr
+            - containerPort: 8001
+              name: tts
+          env:
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token
+                  key: token
+            - name: HUGGINGFACE_ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token
+                  key: token
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+          # Run both ASR + TTS servers in one container sharing a single GPU
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              echo "Starting Nemotron Speech ASR server on port 8080..."
+              python -m nemotron_speech.server --port 8080 &
+              ASR_PID=$!
+
+              echo "Starting Magpie TTS server on port 8001..."
+              python -m nemotron_speech.tts_server --port 8001 &
+              TTS_PID=$!
+
+              echo "Waiting for ASR (PID=$ASR_PID) and TTS (PID=$TTS_PID)..."
+              wait $ASR_PID $TTS_PID
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 120
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 180
+            periodSeconds: 30
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: hf-cache
+              mountPath: /root/.cache/huggingface
+      volumes:
+        - name: hf-cache
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nemotron-speech-asr-tts
+  namespace: spellingbee
+spec:
+  type: ClusterIP
+  selector: { app: nemotron-speech-asr-tts }
+  ports:
+    - name: asr
+      port: 8080
+      targetPort: 8080
+    - name: tts
+      port: 8001
+      targetPort: 8001
