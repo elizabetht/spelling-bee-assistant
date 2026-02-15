@@ -53,7 +53,6 @@ try:
     )
     from pipecat.utils.text.simple_text_aggregator import SimpleTextAggregator
     from nvidia_pipecat.services.nvidia_llm import NvidiaLLMService
-    from nvidia_pipecat.serializers.ace_websocket import ACEWebSocketSerializer
     from nvidia_pipecat.transports.network.ace_fastapi_websocket import ACETransport, ACETransportParams
     from nvidia_pipecat.transports.services.ace_controller.routers.websocket_router import (
         router as websocket_router,
@@ -315,7 +314,6 @@ if PIPECAT_AVAILABLE:
                 audio_in_sample_rate=16000,
                 audio_out_sample_rate=16000,
                 add_wav_header=False,
-                serializer=ACEWebSocketSerializer(),
                 vad_analyzer=SileroVADAnalyzer(
                     params=VADParams(
                         confidence=0.8,
