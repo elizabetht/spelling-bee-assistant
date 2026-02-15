@@ -69,6 +69,10 @@ except ImportError:
 # Placeholder for NeMo Guardrails integration
 # from nemoguardrails import Rails
 
+import logging
+
+logging.getLogger("pipecat.serializers.protobuf").setLevel(logging.ERROR)
+
 load_dotenv()
 
 app = FastAPI()
