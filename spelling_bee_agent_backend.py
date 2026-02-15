@@ -40,7 +40,7 @@ except ImportError:
 try:
     from pipecat.audio.vad.silero import SileroVADAnalyzer
     from pipecat.audio.vad.vad_analyzer import VADParams
-    from pipecat.frames.frames import Frame, LLMMessagesFrame, MessageFrame, TextFrame
+    from pipecat.frames.frames import Frame, LLMMessagesFrame, OutputTransportMessageFrame, TextFrame
     from pipecat.pipeline.pipeline import Pipeline
     from pipecat.pipeline.task import PipelineParams, PipelineTask
     from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
@@ -127,9 +127,9 @@ if PIPECAT_AVAILABLE:
             if isinstance(frame, TextFrame) and frame.text:
                 cleaned = self._MARKDOWN_RE.sub('', frame.text)
                 frame.text = cleaned
-                # Send cleaned text to client as a MessageFrame (serializable)
+                # Send cleaned text to client via OutputTransportMessageFrame
                 msg = json.dumps({"type": "tts_update", "text": cleaned})
-                await self.push_frame(MessageFrame(data=msg), direction)
+                await self.push_frame(OutputTransportMessageFrame(message=msg), direction)
             await self.push_frame(frame, direction)
 
 
