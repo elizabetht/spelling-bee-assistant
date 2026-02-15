@@ -3,31 +3,64 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>Spelling Bee Assistant</title>
     <style>
       * { box-sizing: border-box; }
 
       body {
         font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-        margin: 24px;
+        margin: 0;
+        padding: 24px;
         max-width: 900px;
-        color: #222;
+        background: #1a1a2e;
+        color: #e0e0e0;
       }
 
-      h1 { margin-bottom: 4px; }
+      /* --- Header / Logo --- */
+      .logo {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 4px;
+      }
 
-      .hint { color: #666; }
+      .logo-bee {
+        font-size: 2.2rem;
+        line-height: 1;
+      }
 
+      .logo h1 {
+        margin: 0;
+        font-size: 1.5rem;
+        color: #f5c842;
+      }
+
+      .subtitle {
+        color: #888;
+        margin-bottom: 16px;
+      }
+
+      /* --- Cards --- */
       .card {
-        border: 1px solid #ddd;
+        border: 1px solid #2a2a4a;
         border-radius: 12px;
         padding: 16px;
         margin: 12px 0;
+        background: #16213e;
       }
 
       .card.hidden { display: none; }
 
-      .card h2 { margin-top: 0; }
+      .card h2 {
+        margin-top: 0;
+        color: #f5c842;
+        font-size: 1.1rem;
+      }
+
+      .hint { color: #888; }
 
       .row {
         display: flex;
@@ -39,16 +72,27 @@
       button {
         padding: 10px 14px;
         border-radius: 10px;
-        border: 1px solid #bbb;
-        background: #fff;
+        border: 1px solid #3a3a5a;
+        background: #2a2a4a;
+        color: #e0e0e0;
         cursor: pointer;
         font-size: 0.95rem;
+        transition: background 0.2s;
+      }
+
+      button:hover:not(:disabled) {
+        background: #3a3a5a;
       }
 
       button.primary {
-        background: #111;
-        color: #fff;
-        border-color: #111;
+        background: #f5c842;
+        color: #1a1a2e;
+        border-color: #f5c842;
+        font-weight: 600;
+      }
+
+      button.primary:hover:not(:disabled) {
+        background: #e0b530;
       }
 
       button.danger {
@@ -57,14 +101,18 @@
         border-color: #c30;
       }
 
+      button.danger:hover:not(:disabled) {
+        background: #a00;
+      }
+
       button:disabled {
-        opacity: 0.5;
+        opacity: 0.4;
         cursor: not-allowed;
       }
 
       /* --- Upload area --- */
       .drop-zone {
-        border: 2px dashed #ccc;
+        border: 2px dashed #3a3a5a;
         border-radius: 12px;
         padding: 2rem;
         text-align: center;
@@ -75,8 +123,8 @@
 
       .drop-zone:hover,
       .drop-zone.dragover {
-        border-color: #111;
-        background: #f5f5f5;
+        border-color: #f5c842;
+        background: #1e2a4a;
       }
 
       .drop-zone input[type="file"] {
@@ -92,7 +140,7 @@
       }
 
       .drop-zone-text {
-        color: #666;
+        color: #888;
         font-size: 0.9rem;
       }
 
@@ -102,9 +150,46 @@
         min-height: 1.4rem;
       }
 
-      .upload-status.ok { color: #0a7; font-weight: 600; }
-      .upload-status.err { color: #c30; font-weight: 600; }
-      .upload-status.loading { color: #666; }
+      .upload-status.ok { color: #4caf50; font-weight: 600; }
+      .upload-status.err { color: #ef5350; font-weight: 600; }
+      .upload-status.loading { color: #888; }
+
+      /* --- Score bar --- */
+      .score-bar {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        padding: 10px 16px;
+        background: #1a1a2e;
+        border: 1px solid #2a2a4a;
+        border-radius: 10px;
+        margin-bottom: 12px;
+        font-size: 0.9rem;
+      }
+
+      .score-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .score-label {
+        color: #888;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.04em;
+      }
+
+      .score-value {
+        font-weight: 700;
+        font-size: 1.1rem;
+      }
+
+      .score-value.correct { color: #4caf50; }
+      .score-value.incorrect { color: #ef5350; }
+      .score-value.total { color: #f5c842; }
+      .score-value.word { color: #90caf9; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 
       /* --- Session status bar --- */
       .session-status {
@@ -112,34 +197,35 @@
         align-items: center;
         gap: 12px;
         padding: 12px 16px;
-        border: 1px solid #ddd;
+        border: 1px solid #2a2a4a;
         border-radius: 12px;
         margin-bottom: 12px;
+        background: #1a1a2e;
       }
 
       .mic-indicator {
         width: 12px;
         height: 12px;
         border-radius: 50%;
-        background: #aaa;
+        background: #555;
         transition: background 0.3s;
         flex-shrink: 0;
       }
 
       .mic-indicator.listening {
-        background: #0a7;
-        box-shadow: 0 0 6px #0a788;
+        background: #4caf50;
+        box-shadow: 0 0 8px #4caf5088;
         animation: pulse 1.5s infinite;
       }
 
       .mic-indicator.bot-speaking {
-        background: #111;
-        box-shadow: 0 0 6px #11188;
+        background: #f5c842;
+        box-shadow: 0 0 8px #f5c84288;
         animation: pulse 1s infinite;
       }
 
       .mic-indicator.muted {
-        background: #c30;
+        background: #ef5350;
       }
 
       @keyframes pulse {
@@ -149,7 +235,7 @@
 
       .status-label {
         font-size: 0.9rem;
-        color: #666;
+        color: #888;
         flex: 1;
       }
 
@@ -160,12 +246,13 @@
 
       /* --- Transcript --- */
       .transcript {
-        border: 1px solid #ddd;
+        border: 1px solid #2a2a4a;
         border-radius: 12px;
         padding: 16px;
         overflow-y: auto;
         min-height: 300px;
-        max-height: calc(100vh - 300px);
+        max-height: calc(100vh - 380px);
+        background: #0f1529;
       }
 
       .transcript-entry {
@@ -186,8 +273,8 @@
         margin-bottom: 2px;
       }
 
-      .transcript-label.user { color: #666; }
-      .transcript-label.bot { color: #111; }
+      .transcript-label.user { color: #90caf9; }
+      .transcript-label.bot { color: #f5c842; }
 
       .transcript-text {
         padding: 8px 12px;
@@ -199,67 +286,92 @@
       }
 
       .transcript-entry.user .transcript-text {
-        background: #f1f3f4;
+        background: #1e2a4a;
+        color: #e0e0e0;
       }
 
       .transcript-entry.bot .transcript-text {
-        background: #f0f9f4;
+        background: #1a2e1a;
+        color: #e0e0e0;
       }
 
       .transcript-text.interim {
-        opacity: 0.6;
+        opacity: 0.5;
         font-style: italic;
       }
 
       .transcript-empty {
         text-align: center;
-        color: #666;
+        color: #555;
         padding: 3rem 1rem;
         font-size: 0.95rem;
       }
     </style>
   </head>
   <body>
-    <h1>Spelling Bee Assistant</h1>
-    <p class="hint">Practice spelling with a voice-powered AI tutor</p>
+    <div class="logo">
+      <span class="logo-bee">&#127811;</span>
+      <h1>Spelling Bee Assistant</h1>
+    </div>
+    <p class="subtitle">Practice spelling with a voice-powered AI tutor</p>
 
-      <!-- Step 1: Upload -->
-      <div id="stepUpload" class="card">
-        <h2>1) Upload word list image</h2>
-        <div class="drop-zone" id="dropZone">
-          <input type="file" id="imageFile" accept="image/*" />
-          <div class="drop-zone-icon">&#128247;</div>
-          <div class="drop-zone-text">
-            Drop a word list image here or click to browse
-          </div>
-        </div>
-        <div class="upload-status" id="uploadStatus"></div>
-      </div>
-
-      <!-- Step 2: Connect -->
-      <div id="stepConnect" class="card hidden">
-        <h2>2) Start session</h2>
-        <p class="hint" style="margin-bottom: 12px;">
-          This will request microphone access and connect to the spelling tutor.
-        </p>
-        <button class="primary" id="startBtn">Start Session</button>
-      </div>
-
-      <!-- Step 3: Session -->
-      <div id="sessionView" class="card hidden">
-        <h2>3) Voice session</h2>
-        <div class="session-status">
-          <div class="mic-indicator" id="micIndicator"></div>
-          <span class="status-label" id="statusLabel">Connecting...</span>
-          <div class="session-controls">
-            <button id="muteBtn" title="Mute microphone">Mute</button>
-            <button class="danger" id="endBtn">End Session</button>
-          </div>
-        </div>
-        <div class="transcript" id="transcript">
-          <div class="transcript-empty">Waiting for conversation to start...</div>
+    <!-- Step 1: Upload -->
+    <div id="stepUpload" class="card">
+      <h2>1) Upload word list image</h2>
+      <div class="drop-zone" id="dropZone">
+        <input type="file" id="imageFile" accept="image/*" />
+        <div class="drop-zone-icon">&#128247;</div>
+        <div class="drop-zone-text">
+          Drop a word list image here or click to browse
         </div>
       </div>
+      <div class="upload-status" id="uploadStatus"></div>
+    </div>
+
+    <!-- Step 2: Connect -->
+    <div id="stepConnect" class="card hidden">
+      <h2>2) Start session</h2>
+      <p class="hint" style="margin-bottom: 12px;">
+        This will request microphone access and connect to the spelling tutor.
+      </p>
+      <button class="primary" id="startBtn">Start Session</button>
+    </div>
+
+    <!-- Step 3: Session -->
+    <div id="sessionView" class="card hidden">
+      <h2>3) Voice session</h2>
+
+      <div class="score-bar" id="scoreBar">
+        <div class="score-item">
+          <span class="score-label">Word</span>
+          <span class="score-value word" id="scoreWord">-</span>
+        </div>
+        <div class="score-item">
+          <span class="score-label">Correct</span>
+          <span class="score-value correct" id="scoreCorrect">0</span>
+        </div>
+        <div class="score-item">
+          <span class="score-label">Incorrect</span>
+          <span class="score-value incorrect" id="scoreIncorrect">0</span>
+        </div>
+        <div class="score-item">
+          <span class="score-label">Progress</span>
+          <span class="score-value total" id="scoreProgress">-</span>
+        </div>
+      </div>
+
+      <div class="session-status">
+        <div class="mic-indicator" id="micIndicator"></div>
+        <span class="status-label" id="statusLabel">Connecting...</span>
+        <div class="session-controls">
+          <button id="muteBtn" title="Mute microphone">Mute</button>
+          <button class="danger" id="endBtn">End Session</button>
+        </div>
+      </div>
+      <div class="transcript" id="transcript">
+        <div class="transcript-empty">Waiting for conversation to start...</div>
+      </div>
+    </div>
 
     <script>
     // ===================== Audio Worklet Processor (inline) =====================
@@ -323,6 +435,7 @@ registerProcessor('capture-processor', CaptureProcessor);
 
     // ===================== State =====================
     let sessionId = null;
+    let totalWords = 0;
     let ws = null;
     let audioCtx = null;
     let micStream = null;
@@ -338,6 +451,11 @@ registerProcessor('capture-processor', CaptureProcessor);
     let currentUserEntry = null;
     let currentBotEntry = null;
 
+    // Score tracking (parsed from bot transcripts)
+    let scoreCorrect = 0;
+    let scoreIncorrect = 0;
+    let currentWord = '-';
+
     // ===================== DOM refs =====================
     const stepUpload = document.getElementById('stepUpload');
     const stepConnect = document.getElementById('stepConnect');
@@ -351,6 +469,50 @@ registerProcessor('capture-processor', CaptureProcessor);
     const micIndicator = document.getElementById('micIndicator');
     const statusLabel = document.getElementById('statusLabel');
     const transcript = document.getElementById('transcript');
+    const scoreWordEl = document.getElementById('scoreWord');
+    const scoreCorrectEl = document.getElementById('scoreCorrect');
+    const scoreIncorrectEl = document.getElementById('scoreIncorrect');
+    const scoreProgressEl = document.getElementById('scoreProgress');
+
+    function updateScoreUI() {
+      scoreWordEl.textContent = currentWord;
+      scoreCorrectEl.textContent = scoreCorrect;
+      scoreIncorrectEl.textContent = scoreIncorrect;
+      const attempted = scoreCorrect + scoreIncorrect;
+      scoreProgressEl.textContent = totalWords > 0 ? `${attempted} / ${totalWords}` : '-';
+    }
+
+    // ===================== Score parsing from bot text =====================
+    function parseScoreFromText(text) {
+      if (!text) return;
+      const lower = text.toLowerCase();
+
+      // Detect correct/incorrect
+      if (/\bthat'?s\s+(right|correct)\b/i.test(text) ||
+          /\bwell\s+done\b/i.test(text) ||
+          /\bgreat\s+(job|spelling)\b/i.test(text) ||
+          /\bperfect\b/i.test(text) ||
+          /\byou\s+spelled\s+it\s+(correctly|right)\b/i.test(text) ||
+          /\bcorrect!\b/i.test(text)) {
+        scoreCorrect++;
+        updateScoreUI();
+      } else if (/\bnot\s+quite\b/i.test(text) ||
+                 /\bthat'?s\s+not\s+(right|correct)\b/i.test(text) ||
+                 /\bincorrect\b/i.test(text) ||
+                 /\bnot\s+the\s+right\s+spelling\b/i.test(text) ||
+                 /\blet'?s\s+try\s+(again|that\s+again)\b/i.test(text) ||
+                 /\bthe\s+correct\s+spelling\s+is\b/i.test(text)) {
+        scoreIncorrect++;
+        updateScoreUI();
+      }
+
+      // Detect current word: "spell the word X" or "next word is X" or "your word is X"
+      const wordMatch = text.match(/(?:spell(?:\s+the\s+word)?|next\s+word\s+is|your\s+word\s+is|the\s+word\s+is)[:\s]+["']?(\w+)["']?/i);
+      if (wordMatch) {
+        currentWord = wordMatch[1].toLowerCase();
+        updateScoreUI();
+      }
+    }
 
     // ===================== Upload =====================
     dropZone.addEventListener('dragover', (e) => {
@@ -377,9 +539,27 @@ registerProcessor('capture-processor', CaptureProcessor);
       }
     });
 
-    async function handleUpload(file) {
+    let uploadTimer = null;
+
+    function startUploadTimer() {
+      let seconds = 0;
       uploadStatus.className = 'upload-status loading';
-      uploadStatus.textContent = 'Uploading and processing...';
+      uploadStatus.textContent = 'Processing... 0s';
+      uploadTimer = setInterval(() => {
+        seconds++;
+        uploadStatus.textContent = `Processing... ${seconds}s`;
+      }, 1000);
+    }
+
+    function stopUploadTimer() {
+      if (uploadTimer) {
+        clearInterval(uploadTimer);
+        uploadTimer = null;
+      }
+    }
+
+    async function handleUpload(file) {
+      startUploadTimer();
 
       const formData = new FormData();
       formData.append('file', file);
@@ -387,6 +567,7 @@ registerProcessor('capture-processor', CaptureProcessor);
       try {
         const res = await fetch('/upload-image', { method: 'POST', body: formData });
         const data = await res.json();
+        stopUploadTimer();
 
         if (!res.ok) {
           uploadStatus.className = 'upload-status err';
@@ -395,15 +576,16 @@ registerProcessor('capture-processor', CaptureProcessor);
         }
 
         sessionId = data.session_id;
-        const wordCount = data.word_count || 0;
+        totalWords = data.word_count || 0;
 
         uploadStatus.className = 'upload-status ok';
-        uploadStatus.textContent = `${wordCount} word${wordCount !== 1 ? 's' : ''} loaded`;
+        uploadStatus.textContent = `${totalWords} word${totalWords !== 1 ? 's' : ''} loaded`;
 
         // Show step 2
         stepConnect.classList.remove('hidden');
         stepConnect.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       } catch (err) {
+        stopUploadTimer();
         uploadStatus.className = 'upload-status err';
         uploadStatus.textContent = `Upload failed: ${err.message}`;
       }
@@ -456,6 +638,12 @@ registerProcessor('capture-processor', CaptureProcessor);
         // Set up playback context
         playbackCtx = new AudioContext({ sampleRate: 16000 });
         nextPlayTime = 0;
+
+        // Reset score
+        scoreCorrect = 0;
+        scoreIncorrect = 0;
+        currentWord = '-';
+        updateScoreUI();
 
         // Open WebSocket
         const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -552,6 +740,9 @@ registerProcessor('capture-processor', CaptureProcessor);
       }
     }
 
+    // Buffer to accumulate full bot utterance for score parsing
+    let botUtteranceBuffer = '';
+
     function handleTranscriptMessage(msg) {
       const type = msg.type;
 
@@ -572,22 +763,26 @@ registerProcessor('capture-processor', CaptureProcessor);
         // Bot speaking text
         isBotSpeaking = true;
         micIndicator.className = 'mic-indicator bot-speaking';
-        statusLabel.textContent = 'Bot is speaking...';
+        statusLabel.textContent = 'Tutor is speaking...';
 
         if (!currentBotEntry) {
           currentBotEntry = addTranscriptEntry('bot');
+          botUtteranceBuffer = '';
         }
         // Accumulate TTS text
-        const existingText = currentBotEntry.querySelector('.transcript-text').textContent;
         const newText = msg.text || msg.data || '';
-        updateTranscriptText(currentBotEntry, existingText + newText, true);
+        botUtteranceBuffer += newText;
+        updateTranscriptText(currentBotEntry, botUtteranceBuffer, true);
       } else if (type === 'tts_end') {
-        // Bot done speaking
+        // Bot done speaking — parse score from full utterance
         if (currentBotEntry) {
           const textEl = currentBotEntry.querySelector('.transcript-text');
           textEl.classList.remove('interim');
           currentBotEntry = null;
         }
+        parseScoreFromText(botUtteranceBuffer);
+        botUtteranceBuffer = '';
+
         isBotSpeaking = false;
         if (!isMuted) {
           micIndicator.className = 'mic-indicator listening';
@@ -689,7 +884,7 @@ registerProcessor('capture-processor', CaptureProcessor);
         statusLabel.textContent = 'Muted';
       } else if (isBotSpeaking) {
         micIndicator.className = 'mic-indicator bot-speaking';
-        statusLabel.textContent = 'Bot is speaking...';
+        statusLabel.textContent = 'Tutor is speaking...';
       } else {
         micIndicator.className = 'mic-indicator listening';
         statusLabel.textContent = 'Listening...';
@@ -703,10 +898,11 @@ registerProcessor('capture-processor', CaptureProcessor);
       sessionView.classList.add('hidden');
       stepUpload.classList.remove('hidden');
       stepConnect.classList.remove('hidden');
-      // Reset transcript
+      // Reset transcript and score
       transcript.innerHTML = '<div class="transcript-empty">Waiting for conversation to start...</div>';
       currentUserEntry = null;
       currentBotEntry = null;
+      botUtteranceBuffer = '';
       statusLabel.textContent = 'Connecting...';
     });
 

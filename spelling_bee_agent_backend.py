@@ -288,7 +288,10 @@ async def healthz():
 async def home():
     index_file = UI_DIR / "index.html"
     if index_file.exists():
-        return FileResponse(str(index_file))
+        return FileResponse(
+            str(index_file),
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        )
     raise HTTPException(status_code=404, detail="UI not found")
 
 
