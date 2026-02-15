@@ -1,0 +1,23 @@
+# Core backend
+fastapi
+uvicorn
+python-dotenv
+
+# Speech and agent pipeline
+nvidia-pipecat
+nvidia-riva-client
+
+# Vision-language model / OCR (example: pytesseract, Pillow)
+pytesseract
+pillow
+
+# Langchain and Redis for agentic memory
+langchain
+redis
+langchain-community
+
+# NeMo Guardrails
+nemoguardrails
+
+# Web UI (if using React/Vite, managed separately)
+
