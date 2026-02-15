@@ -50,6 +50,11 @@ def main():
         "        # Remove leading newlines only\n"
         '        text = text.lstrip("\\n")',
     )
+    # Fix async filter.reset_interruption() — pipecat >=0.0.100 made it async
+    s = s.replace(
+        "            filter.reset_interruption()",
+        "            await filter.reset_interruption()",
+    )
     f.write_text(s)
     print(f"  Patched {f}")
 

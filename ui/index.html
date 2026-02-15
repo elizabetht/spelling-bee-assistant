@@ -446,6 +446,9 @@ registerProcessor('capture-processor', CaptureProcessor);
     // Playback queue
     let playbackCtx = null;
     let nextPlayTime = 0;
+    let lastMessageTime = 0;
+    const PLAY_TIME_RESET_THRESHOLD = 1.0; // seconds
+    let activeSources = [];
 
     // Transcript
     let currentUserEntry = null;
@@ -842,12 +845,23 @@ registerProcessor('capture-processor', CaptureProcessor);
     }
 
     // ===================== WebSocket message handling =====================
+    let wsMessageCount = 0;
+    let audioFrameCount = 0;
+
     function handleWsMessage(event) {
+      wsMessageCount++;
       if (event.data instanceof ArrayBuffer) {
         const frame = parseProtobufFrame(event.data);
-        if (!frame) return;
+        if (!frame) {
+          console.log('[WS] msg#', wsMessageCount, 'binary', event.data.byteLength, 'bytes — could not parse');
+          return;
+        }
 
         if (frame.type === 'audio') {
+          audioFrameCount++;
+          if (audioFrameCount <= 3) {
+            console.log('[Audio] frame#', audioFrameCount, 'size:', frame.pcm.length, 'rate:', frame.sampleRate);
+          }
           playAudioChunk(frame.pcm, frame.sampleRate);
         } else if (frame.type === 'transcription') {
           // ASR transcription from user speech — finalize any open bot entry first
@@ -869,6 +883,7 @@ registerProcessor('capture-processor', CaptureProcessor);
           currentUserEntry = null;
         } else if (frame.type === 'text') {
           // TTS text from bot
+          console.log('[WS] text frame:', frame.text?.substring(0, 80));
           isBotSpeaking = true;
           micIndicator.className = 'mic-indicator bot-speaking';
           statusLabel.textContent = 'Tutor is speaking...';
@@ -1004,44 +1019,62 @@ registerProcessor('capture-processor', CaptureProcessor);
     // ===================== Audio Playback =====================
     function playAudioChunk(pcmBytes, sampleRate) {
       if (!playbackCtx) {
-        console.warn('[Audio] No playback context, dropping audio chunk');
+        console.warn('[Audio] No playback context, dropping chunk');
         return;
       }
 
-      // Ensure context is running (may have been suspended by browser policy)
+      // Ensure context is running
       if (playbackCtx.state === 'suspended') {
         playbackCtx.resume().then(() => console.log('[Audio] Playback context resumed'));
       }
 
-      let data = pcmBytes;
-      // Strip WAV header if present (44-byte RIFF header starts with 'RIFF')
-      if (data.length > 44 && data[0] === 0x52 && data[1] === 0x49 && data[2] === 0x46 && data[3] === 0x46) {
-        data = data.slice(44);
-      }
-
-      const numSamples = Math.floor(data.length / 2);
-      if (numSamples <= 0) return;
-
-      const rate = sampleRate || 16000;
-      const audioBuffer = playbackCtx.createBuffer(1, numSamples, rate);
-      const channelData = audioBuffer.getChannelData(0);
-      const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-
-      for (let i = 0; i < numSamples; i++) {
-        const sample = view.getInt16(i * 2, true);
-        channelData[i] = sample / 32768;
-      }
-
-      const source = playbackCtx.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(playbackCtx.destination);
-
+      // Reset play time if we haven't received audio in a while (gap between utterances)
       const now = playbackCtx.currentTime;
-      if (nextPlayTime < now) {
-        nextPlayTime = now + 0.01; // tiny offset to avoid scheduling in the past
+      const diff = now - lastMessageTime;
+      if (nextPlayTime === 0 || diff > PLAY_TIME_RESET_THRESHOLD) {
+        nextPlayTime = now;
       }
-      source.start(nextPlayTime);
-      nextPlayTime += audioBuffer.duration;
+      lastMessageTime = now;
+
+      // Copy bytes so we have a standalone ArrayBuffer for decodeAudioData
+      const audioArray = new Uint8Array(Array.from(pcmBytes));
+
+      // Try decodeAudioData first (handles WAV-wrapped audio from add_wav_header=True)
+      playbackCtx.decodeAudioData(audioArray.buffer,
+        function onSuccess(buffer) {
+          const source = new AudioBufferSourceNode(playbackCtx);
+          source.buffer = buffer;
+          source.connect(playbackCtx.destination);
+          source.start(nextPlayTime);
+          nextPlayTime += buffer.duration;
+          activeSources.push(source);
+          source.onended = () => {
+            const idx = activeSources.indexOf(source);
+            if (idx >= 0) activeSources.splice(idx, 1);
+          };
+        },
+        function onError() {
+          // Fallback: treat as raw PCM int16 LE (for raw/headerless audio)
+          let data = pcmBytes;
+          if (data.length > 44 && data[0] === 0x52 && data[1] === 0x49 && data[2] === 0x46 && data[3] === 0x46) {
+            data = data.slice(44);
+          }
+          const numSamples = Math.floor(data.length / 2);
+          if (numSamples <= 0) return;
+          const rate = sampleRate || 16000;
+          const audioBuffer = playbackCtx.createBuffer(1, numSamples, rate);
+          const channelData = audioBuffer.getChannelData(0);
+          const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+          for (let i = 0; i < numSamples; i++) {
+            channelData[i] = view.getInt16(i * 2, true) / 32768;
+          }
+          const source = playbackCtx.createBufferSource();
+          source.buffer = audioBuffer;
+          source.connect(playbackCtx.destination);
+          source.start(nextPlayTime);
+          nextPlayTime += audioBuffer.duration;
+        }
+      );
     }
 
     // ===================== Mute / End =====================
@@ -1089,6 +1122,9 @@ registerProcessor('capture-processor', CaptureProcessor);
 
     function cleanup() {
       if (botUtteranceTimer) { clearTimeout(botUtteranceTimer); botUtteranceTimer = null; }
+      // Stop all active audio sources
+      activeSources.forEach(s => { try { s.stop(); } catch(e) {} });
+      activeSources = [];
       if (micStream) {
         micStream.getTracks().forEach(t => t.stop());
         micStream = null;
@@ -1104,6 +1140,10 @@ registerProcessor('capture-processor', CaptureProcessor);
       workletNode = null;
       isMuted = false;
       isBotSpeaking = false;
+      nextPlayTime = 0;
+      lastMessageTime = 0;
+      wsMessageCount = 0;
+      audioFrameCount = 0;
       muteBtn.textContent = 'Mute';
       startBtn.disabled = false;
       startBtn.textContent = 'Start Practice';
