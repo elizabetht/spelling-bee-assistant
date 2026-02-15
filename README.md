@@ -84,6 +84,7 @@ pip install -r requirements.txt
 ```
 
 Note: Pipecat is installed from NVIDIA source (`voice-agent-examples`) in `requirements.txt`.
+The Docker image installs a C++ toolchain because some dependencies (for example `annoy`) compile native extensions.
 
 Start backend:
 
