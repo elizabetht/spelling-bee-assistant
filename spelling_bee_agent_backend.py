@@ -40,11 +40,12 @@ except ImportError:
 try:
     from pipecat.audio.vad.silero import SileroVADAnalyzer
     from pipecat.audio.vad.vad_analyzer import VADParams
-    from pipecat.frames.frames import Frame, LLMMessagesFrame, OutputAudioRawFrame, OutputTransportMessageFrame, TextFrame
+    from pipecat.frames.frames import Frame, LLMMessagesFrame, OutputAudioRawFrame, OutputTransportMessageFrame, TextFrame, TTSAudioRawFrame
     from pipecat.pipeline.pipeline import Pipeline
     from pipecat.pipeline.task import PipelineParams, PipelineTask
     from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
     from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+    from pipecat.serializers.protobuf import ProtobufFrameSerializer
 
     from nvidia_pipecat.pipeline.ace_pipeline_runner import ACEPipelineRunner, PipelineMetadata
     from nvidia_pipecat.processors.nvidia_context_aggregator import create_nvidia_context_aggregator
@@ -58,8 +59,13 @@ try:
         router as websocket_router,
     )
 
-    # Cloud-hosted ASR (ElevenLabs)
+    # Cloud-hosted ASR + TTS (ElevenLabs)
     from pipecat.services.elevenlabs.stt import ElevenLabsRealtimeSTTService
+    from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
+
+    # Patch: protobuf serializer uses exact type matching, so TTSAudioRawFrame
+    # (subclass of OutputAudioRawFrame) gets silently dropped. Register it.
+    ProtobufFrameSerializer.SERIALIZABLE_TYPES[TTSAudioRawFrame] = "audio"
 
     PIPECAT_AVAILABLE = True
 except ImportError:
@@ -111,63 +117,6 @@ class _NoOpMemory:
 
 
 if PIPECAT_AVAILABLE:
-    class DirectElevenLabsTTS(FrameProcessor):
-        """Direct REST-based ElevenLabs TTS.
-
-        Bypasses pipecat's WebSocket-based ElevenLabsTTSService and calls the
-        ElevenLabs REST API directly — the same approach used in the working
-        test_elevenlabs_tts.py script.
-        """
-
-        def __init__(self, *, api_key: str, voice_id: str, model: str = "eleven_turbo_v2_5", sample_rate: int = 16000):
-            super().__init__()
-            self._api_key = api_key
-            self._voice_id = voice_id
-            self._model = model
-            self._sample_rate = sample_rate
-            self._url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}?output_format=pcm_{sample_rate}"
-
-        def _synthesize(self, text: str) -> bytes:
-            """Call ElevenLabs REST API and return raw PCM bytes."""
-            import urllib.request as ureq
-            payload = json.dumps({
-                "text": text,
-                "model_id": self._model,
-                "voice_settings": {"stability": 0.5, "similarity_boost": 0.75},
-            }).encode()
-            req = ureq.Request(
-                self._url,
-                data=payload,
-                headers={
-                    "xi-api-key": self._api_key,
-                    "Content-Type": "application/json",
-                    "Accept": "audio/pcm",
-                },
-            )
-            with ureq.urlopen(req, timeout=30) as resp:
-                return resp.read()
-
-        async def process_frame(self, frame: Frame, direction: FrameDirection):
-            await super().process_frame(frame, direction)
-            if isinstance(frame, TextFrame) and frame.text:
-                import asyncio
-                try:
-                    pcm = await asyncio.to_thread(self._synthesize, frame.text)
-                    if pcm:
-                        # Push audio in ~200ms chunks to avoid blocking
-                        chunk_size = self._sample_rate * 2 * 200 // 1000  # 200ms of 16-bit mono
-                        for i in range(0, len(pcm), chunk_size):
-                            audio_frame = OutputAudioRawFrame(
-                                audio=pcm[i:i + chunk_size],
-                                sample_rate=self._sample_rate,
-                                num_channels=1,
-                            )
-                            await self.push_frame(audio_frame, direction)
-                except Exception as e:
-                    logging.getLogger(__name__).error(f"DirectElevenLabsTTS error: {e}")
-            else:
-                await self.push_frame(frame, direction)
-
     class MarkdownStripper(FrameProcessor):
         """Strip markdown from text frames and emit bot text as MessageFrame.
 
@@ -365,6 +314,33 @@ async def upload_image(file: UploadFile = File(...)):
     }
 
 
+import random
+
+SAMPLE_WORD_BANK = [
+    "adventure", "beautiful", "calendar", "dangerous", "elephant",
+    "favorite", "generous", "hurricane", "important", "knowledge",
+    "language", "mountain", "necessary", "opposite", "paragraph",
+    "question", "remember", "sentence", "together", "umbrella",
+    "vacation", "wonderful", "alphabet", "birthday", "children",
+    "discover", "exercise", "February", "grateful", "hospital",
+]
+
+
+@app.post("/sample-words")
+async def sample_words(count: int = 5):
+    """Generate a session with random sample words for quick testing."""
+    words = random.sample(SAMPLE_WORD_BANK, min(count, len(SAMPLE_WORD_BANK)))
+    session_id = os.urandom(8).hex()
+    set_session_words(session_id, words)
+    session_progress[session_id] = {"current": 0, "incorrect": [], "skipped": []}
+    return {
+        "session_id": session_id,
+        "word_count": len(words),
+        "sample": words,
+        "next": f"Connect websocket at /pipecat/ws/{session_id}",
+    }
+
+
 @app.get("/healthz")
 async def healthz():
     return {"status": "ok", "pipecat_available": PIPECAT_AVAILABLE}
@@ -416,7 +392,7 @@ if PIPECAT_AVAILABLE:
             sample_rate=16000,
         )
 
-        tts = DirectElevenLabsTTS(
+        tts = ElevenLabsTTSService(
             api_key=os.getenv("ELEVENLABS_API_KEY"),
             voice_id=os.getenv("ELEVENLABS_TTS_VOICE_ID", "9BWtsMINqrJLrRacOk9x"),
             model="eleven_turbo_v2_5",

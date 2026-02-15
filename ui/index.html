@@ -325,6 +325,8 @@
           Drop a word list image here or click to browse
         </div>
       </div>
+      <div style="text-align:center; margin:10px 0; color:#666;">— or —</div>
+      <button class="primary" id="sampleWordsBtn" style="width:100%;background:#6c63ff;">Use 5 Sample Words (quick test)</button>
       <div class="upload-status" id="uploadStatus"></div>
     </div>
 
@@ -466,6 +468,7 @@ registerProcessor('capture-processor', CaptureProcessor);
     const dropZone = document.getElementById('dropZone');
     const imageFile = document.getElementById('imageFile');
     const uploadStatus = document.getElementById('uploadStatus');
+    const sampleWordsBtn = document.getElementById('sampleWordsBtn');
     const startBtn = document.getElementById('startBtn');
     const muteBtn = document.getElementById('muteBtn');
     const endBtn = document.getElementById('endBtn');
@@ -557,6 +560,40 @@ registerProcessor('capture-processor', CaptureProcessor);
     imageFile.addEventListener('change', () => {
       if (imageFile.files.length) {
         handleUpload(imageFile.files[0]);
+      }
+    });
+
+    // ===================== Sample Words (quick test) =====================
+    sampleWordsBtn.addEventListener('click', async () => {
+      sampleWordsBtn.disabled = true;
+      sampleWordsBtn.textContent = 'Loading...';
+      uploadStatus.className = 'upload-status loading';
+      uploadStatus.textContent = 'Generating sample words...';
+
+      try {
+        const res = await fetch('/sample-words', { method: 'POST' });
+        const data = await res.json();
+
+        if (!res.ok) {
+          uploadStatus.className = 'upload-status err';
+          uploadStatus.textContent = `Failed: ${data.detail || res.statusText}`;
+          return;
+        }
+
+        sessionId = data.session_id;
+        totalWords = data.word_count || 0;
+
+        uploadStatus.className = 'upload-status ok';
+        uploadStatus.textContent = `${totalWords} sample words: ${data.sample.join(', ')}`;
+
+        stepConnect.classList.remove('hidden');
+        stepConnect.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } catch (err) {
+        uploadStatus.className = 'upload-status err';
+        uploadStatus.textContent = `Failed: ${err.message}`;
+      } finally {
+        sampleWordsBtn.disabled = false;
+        sampleWordsBtn.textContent = 'Use 5 Sample Words (quick test)';
       }
     });
 
