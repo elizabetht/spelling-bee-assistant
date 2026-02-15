@@ -91,6 +91,8 @@ Server runs on `http://0.0.0.0:8080`.
 
 ## Deploy to microk8s
 
+This repo includes a backend container file at `Dockerfile`.
+
 Build and push your backend image to local registry (example):
 
 ```bash
@@ -110,6 +112,15 @@ Check rollout:
 ```bash
 kubectl get pods -n spellingbee -o wide
 kubectl get svc -n spellingbee spelling-bee-agent-backend
+```
+
+If pods show `ImagePullBackOff`, rebuild and restart deployment:
+
+```bash
+docker build -t localhost:32000/spelling-bee-agent-backend:0.1 .
+docker push localhost:32000/spelling-bee-agent-backend:0.1
+kubectl -n spellingbee rollout restart deploy/spelling-bee-agent-backend
+kubectl -n spellingbee get pods -w
 ```
 
 ## Required Environment Variables
