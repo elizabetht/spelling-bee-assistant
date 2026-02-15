@@ -330,11 +330,11 @@
 
     <!-- Step 2: Connect -->
     <div id="stepConnect" class="card hidden">
-      <h2>2) Start session</h2>
+      <h2>2) Start practice</h2>
       <p class="hint" style="margin-bottom: 12px;">
         This will request microphone access and connect to the spelling tutor.
       </p>
-      <button class="primary" id="startBtn">Start Session</button>
+      <button class="primary" id="startBtn">Start Practice</button>
     </div>
 
     <!-- Step 3: Session -->
@@ -365,7 +365,7 @@
         <span class="status-label" id="statusLabel">Connecting...</span>
         <div class="session-controls">
           <button id="muteBtn" title="Mute microphone">Mute</button>
-          <button class="danger" id="endBtn">End Session</button>
+          <button class="danger" id="endBtn">End Practice</button>
         </div>
       </div>
       <div class="transcript" id="transcript">
@@ -591,7 +591,7 @@ registerProcessor('capture-processor', CaptureProcessor);
       }
     }
 
-    // ===================== Start Session =====================
+    // ===================== Start Practice =====================
     startBtn.addEventListener('click', startSession);
 
     async function startSession() {
@@ -625,9 +625,9 @@ registerProcessor('capture-processor', CaptureProcessor);
 
         workletNode.port.onmessage = (e) => {
           if (e.data.type === 'audio' && ws && ws.readyState === WebSocket.OPEN) {
-            const pcmBuf = e.data.pcm;
-            const wavBuf = createWavChunk(new Int16Array(pcmBuf));
-            ws.send(wavBuf);
+            const pcmBuf = new Uint8Array(e.data.pcm);
+            const protoBuf = encodeAudioFrame(pcmBuf, 16000, 1);
+            ws.send(protoBuf);
           }
         };
 
@@ -676,7 +676,7 @@ registerProcessor('capture-processor', CaptureProcessor);
 
       } catch (err) {
         startBtn.disabled = false;
-        startBtn.textContent = 'Start Session';
+        startBtn.textContent = 'Start Practice';
         if (err.name === 'NotAllowedError') {
           alert('Microphone access is required for voice interaction. Please allow microphone access and try again.');
         } else {
@@ -685,57 +685,188 @@ registerProcessor('capture-processor', CaptureProcessor);
       }
     }
 
-    // ===================== WAV helpers =====================
-    function createWavChunk(pcmInt16) {
-      const numSamples = pcmInt16.length;
-      const dataSize = numSamples * 2;
-      const buffer = new ArrayBuffer(44 + dataSize);
-      const view = new DataView(buffer);
-
-      // RIFF header
-      writeString(view, 0, 'RIFF');
-      view.setUint32(4, 36 + dataSize, true);
-      writeString(view, 8, 'WAVE');
-
-      // fmt chunk
-      writeString(view, 12, 'fmt ');
-      view.setUint32(16, 16, true);         // chunk size
-      view.setUint16(20, 1, true);           // PCM format
-      view.setUint16(22, 1, true);           // mono
-      view.setUint32(24, 16000, true);       // sample rate
-      view.setUint32(28, 32000, true);       // byte rate
-      view.setUint16(32, 2, true);           // block align
-      view.setUint16(34, 16, true);          // bits per sample
-
-      // data chunk
-      writeString(view, 36, 'data');
-      view.setUint32(40, dataSize, true);
-
-      // PCM data
-      const pcmView = new Int16Array(buffer, 44);
-      pcmView.set(pcmInt16);
-
-      return buffer;
+    // ===================== Protobuf encoder =====================
+    // Encode a varint
+    function encodeVarint(value) {
+      const bytes = [];
+      while (value > 0x7f) {
+        bytes.push((value & 0x7f) | 0x80);
+        value >>>= 7;
+      }
+      bytes.push(value & 0x7f);
+      return new Uint8Array(bytes);
     }
 
-    function writeString(view, offset, str) {
-      for (let i = 0; i < str.length; i++) {
-        view.setUint8(offset + i, str.charCodeAt(i));
+    // Encode a protobuf field (tag + value)
+    function encodeField(fieldNum, wireType, data) {
+      const tag = encodeVarint((fieldNum << 3) | wireType);
+      if (wireType === 0) {
+        // varint value
+        const val = encodeVarint(data);
+        const out = new Uint8Array(tag.length + val.length);
+        out.set(tag); out.set(val, tag.length);
+        return out;
+      } else if (wireType === 2) {
+        // length-delimited
+        const len = encodeVarint(data.length);
+        const out = new Uint8Array(tag.length + len.length + data.length);
+        out.set(tag); out.set(len, tag.length); out.set(data, tag.length + len.length);
+        return out;
       }
+      return tag;
+    }
+
+    // Encode AudioRawFrame and wrap in Frame
+    // Frame { audio(field 2): AudioRawFrame { audio(3): bytes, sample_rate(4): uint32, num_channels(5): uint32 } }
+    function encodeAudioFrame(pcmBytes, sampleRate, numChannels) {
+      // AudioRawFrame fields
+      const f3 = encodeField(3, 2, pcmBytes);                // audio = bytes
+      const f4 = encodeField(4, 0, sampleRate);              // sample_rate = varint
+      const f5 = encodeField(5, 0, numChannels);             // num_channels = varint
+      // Concatenate AudioRawFrame
+      const audioMsg = new Uint8Array(f3.length + f4.length + f5.length);
+      audioMsg.set(f3); audioMsg.set(f4, f3.length); audioMsg.set(f5, f3.length + f4.length);
+      // Wrap in Frame { audio(field 2) = audioMsg }
+      return encodeField(2, 2, audioMsg);
+    }
+
+    // ===================== Protobuf decoder =====================
+    // Pipecat uses protobuf-serialized Frame messages over WebSocket.
+    // Frame { oneof frame { TextFrame text=1; AudioRawFrame audio=2;
+    //         TranscriptionFrame transcription=3; MessageFrame message=4; } }
+    function decodeVarint(buf, pos) {
+      let result = 0, shift = 0;
+      while (pos < buf.length) {
+        const b = buf[pos++];
+        result |= (b & 0x7f) << shift;
+        if ((b & 0x80) === 0) return [result, pos];
+        shift += 7;
+      }
+      return [result, pos];
+    }
+
+    function decodeProtobufFields(buf) {
+      const fields = {};
+      let pos = 0;
+      while (pos < buf.length) {
+        const [tag, newPos] = decodeVarint(buf, pos);
+        pos = newPos;
+        const fieldNum = tag >>> 3;
+        const wireType = tag & 0x7;
+        if (wireType === 0) {
+          // varint
+          const [val, p] = decodeVarint(buf, pos);
+          pos = p;
+          fields[fieldNum] = val;
+        } else if (wireType === 2) {
+          // length-delimited (string, bytes, embedded message)
+          const [len, p] = decodeVarint(buf, pos);
+          pos = p;
+          fields[fieldNum] = buf.slice(pos, pos + len);
+          pos += len;
+        } else {
+          // skip unknown wire types
+          break;
+        }
+      }
+      return fields;
+    }
+
+    function decodeString(uint8arr) {
+      return new TextDecoder().decode(uint8arr);
+    }
+
+    function parseProtobufFrame(arrayBuffer) {
+      const buf = new Uint8Array(arrayBuffer);
+      // Outer Frame: oneof { text=1, audio=2, transcription=3, message=4 }
+      const outer = decodeProtobufFields(buf);
+
+      if (outer[2]) {
+        // AudioRawFrame: { id=1, name=2, audio=3(bytes), sample_rate=4, num_channels=5 }
+        const audioFields = decodeProtobufFields(outer[2]);
+        const pcmBytes = audioFields[3]; // raw PCM int16 LE
+        const sampleRate = audioFields[4] || 16000;
+        if (pcmBytes && pcmBytes.length > 0) {
+          return { type: 'audio', pcm: pcmBytes, sampleRate };
+        }
+      }
+
+      if (outer[1]) {
+        // TextFrame: { id=1, name=2, text=3 }
+        const textFields = decodeProtobufFields(outer[1]);
+        const text = textFields[3] ? decodeString(textFields[3]) : '';
+        return { type: 'text', text };
+      }
+
+      if (outer[3]) {
+        // TranscriptionFrame: { id=1, name=2, text=3, user_id=4, timestamp=5 }
+        const txFields = decodeProtobufFields(outer[3]);
+        const text = txFields[3] ? decodeString(txFields[3]) : '';
+        return { type: 'transcription', text };
+      }
+
+      if (outer[4]) {
+        // MessageFrame: { data=1 }
+        const msgFields = decodeProtobufFields(outer[4]);
+        const data = msgFields[1] ? decodeString(msgFields[1]) : '';
+        try {
+          return { type: 'message', data: JSON.parse(data) };
+        } catch (e) {
+          return { type: 'message', data };
+        }
+      }
+
+      return null;
     }
 
     // ===================== WebSocket message handling =====================
     function handleWsMessage(event) {
       if (event.data instanceof ArrayBuffer) {
-        // Binary = audio from server
-        playAudioChunk(event.data);
+        const frame = parseProtobufFrame(event.data);
+        if (!frame) return;
+
+        if (frame.type === 'audio') {
+          playAudioChunk(frame.pcm, frame.sampleRate);
+        } else if (frame.type === 'transcription') {
+          // ASR transcription from user speech — finalize any open bot entry first
+          if (currentBotEntry) {
+            currentBotEntry.querySelector('.transcript-text').classList.remove('interim');
+            parseScoreFromText(botUtteranceBuffer);
+            botUtteranceBuffer = '';
+            currentBotEntry = null;
+            isBotSpeaking = false;
+            if (!isMuted) {
+              micIndicator.className = 'mic-indicator listening';
+              statusLabel.textContent = 'Listening...';
+            }
+          }
+          if (!currentUserEntry) {
+            currentUserEntry = addTranscriptEntry('user');
+          }
+          updateTranscriptText(currentUserEntry, frame.text, false);
+          currentUserEntry = null;
+        } else if (frame.type === 'text') {
+          // TTS text from bot
+          isBotSpeaking = true;
+          micIndicator.className = 'mic-indicator bot-speaking';
+          statusLabel.textContent = 'Tutor is speaking...';
+          if (!currentBotEntry) {
+            currentBotEntry = addTranscriptEntry('bot');
+            botUtteranceBuffer = '';
+          }
+          botUtteranceBuffer += frame.text;
+          updateTranscriptText(currentBotEntry, botUtteranceBuffer, true);
+        } else if (frame.type === 'message') {
+          // JSON messages (tts_update, tts_end, asr_update, asr_end, etc.)
+          handleTranscriptMessage(frame.data);
+        }
       } else {
-        // Text = JSON transcript message
+        // Text WebSocket message (shouldn't happen with protobuf, but handle gracefully)
         try {
           const msg = JSON.parse(event.data);
           handleTranscriptMessage(msg);
         } catch (e) {
-          // Ignore non-JSON text
+          // Ignore
         }
       }
     }
@@ -827,34 +958,20 @@ registerProcessor('capture-processor', CaptureProcessor);
     }
 
     // ===================== Audio Playback =====================
-    function playAudioChunk(arrayBuffer) {
+    function playAudioChunk(pcmBytes, sampleRate) {
       if (!playbackCtx) return;
 
-      // Parse WAV: extract PCM data after 44-byte header
-      const dataView = new DataView(arrayBuffer);
-      let pcmOffset = 44;
-      let pcmLength = arrayBuffer.byteLength - 44;
-
-      // Validate minimum WAV size
-      if (arrayBuffer.byteLength < 46) return;
-
-      // Try to find actual data chunk offset for robustness
-      if (arrayBuffer.byteLength >= 44) {
-        // Read from header: data size is at byte 40
-        const declaredSize = dataView.getUint32(40, true);
-        if (declaredSize > 0 && declaredSize <= arrayBuffer.byteLength - 44) {
-          pcmLength = declaredSize;
-        }
-      }
-
-      const numSamples = pcmLength / 2;
+      // pcmBytes is a Uint8Array of raw int16 LE PCM
+      const numSamples = Math.floor(pcmBytes.length / 2);
       if (numSamples <= 0) return;
 
-      const audioBuffer = playbackCtx.createBuffer(1, numSamples, 16000);
+      const rate = sampleRate || 16000;
+      const audioBuffer = playbackCtx.createBuffer(1, numSamples, rate);
       const channelData = audioBuffer.getChannelData(0);
+      const view = new DataView(pcmBytes.buffer, pcmBytes.byteOffset, pcmBytes.byteLength);
 
       for (let i = 0; i < numSamples; i++) {
-        const sample = dataView.getInt16(pcmOffset + i * 2, true);
+        const sample = view.getInt16(i * 2, true);
         channelData[i] = sample / 32768;
       }
 
@@ -892,6 +1009,13 @@ registerProcessor('capture-processor', CaptureProcessor);
     });
 
     endBtn.addEventListener('click', () => {
+      const attempted = scoreCorrect + scoreIncorrect;
+      if (attempted < 25) {
+        const remaining = 25 - attempted;
+        if (!confirm(`You've only practiced ${attempted} word${attempted !== 1 ? 's' : ''} so far! Try to do at least 25. Only ${remaining} more to go!\n\nAre you sure you want to stop?`)) {
+          return;
+        }
+      }
       if (ws) ws.close();
       cleanup();
       // Return to upload view
@@ -924,7 +1048,7 @@ registerProcessor('capture-processor', CaptureProcessor);
       isBotSpeaking = false;
       muteBtn.textContent = 'Mute';
       startBtn.disabled = false;
-      startBtn.textContent = 'Start Session';
+      startBtn.textContent = 'Start Practice';
     }
     </script>
   </body>
