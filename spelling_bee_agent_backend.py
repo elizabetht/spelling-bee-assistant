@@ -40,7 +40,7 @@ except ImportError:
 try:
     from pipecat.audio.vad.silero import SileroVADAnalyzer
     from pipecat.audio.vad.vad_analyzer import VADParams
-    from pipecat.frames.frames import Frame, LLMMessagesFrame, OutputTransportMessageFrame, TextFrame, TTSAudioRawFrame, TTSStartedFrame, TTSStoppedFrame
+    from pipecat.frames.frames import Frame, LLMMessagesFrame, OutputTransportMessageFrame, TextFrame, TTSAudioRawFrame
     from pipecat.pipeline.pipeline import Pipeline
     from pipecat.pipeline.task import PipelineParams, PipelineTask
     from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
@@ -154,7 +154,6 @@ if PIPECAT_AVAILABLE:
                 try:
                     pcm = await asyncio.to_thread(self._synthesize, frame.text)
                     if pcm:
-                        await self.push_frame(TTSStartedFrame(), direction)
                         # Push audio in ~200ms chunks to avoid blocking
                         chunk_size = self._sample_rate * 2 * 200 // 1000  # 200ms of 16-bit mono
                         for i in range(0, len(pcm), chunk_size):
@@ -164,7 +163,6 @@ if PIPECAT_AVAILABLE:
                                 num_channels=1,
                             )
                             await self.push_frame(audio_frame, direction)
-                        await self.push_frame(TTSStoppedFrame(), direction)
                 except Exception as e:
                     logging.getLogger(__name__).error(f"DirectElevenLabsTTS error: {e}")
             else:
