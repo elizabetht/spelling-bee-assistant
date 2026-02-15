@@ -16,6 +16,7 @@ pillow
 
 # Langchain and Redis for agentic memory
 langchain
+langchain-openai
 redis
 langchain-community
 
