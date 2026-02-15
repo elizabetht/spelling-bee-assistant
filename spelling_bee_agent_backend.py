@@ -336,6 +336,7 @@ if PIPECAT_AVAILABLE:
         tts = NvidiaTTSService(
             api_key=os.getenv("NVIDIA_API_KEY"),
             voice_id=os.getenv("RIVA_TTS_VOICE_ID", "Magpie-Multilingual.EN-US.Aria"),
+            sample_rate=16000,
         )
 
         stt_transcript_synchronization = UserTranscriptSynchronization()
