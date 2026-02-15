@@ -40,10 +40,11 @@ except ImportError:
 try:
     from pipecat.audio.vad.silero import SileroVADAnalyzer
     from pipecat.audio.vad.vad_analyzer import VADParams
-    from pipecat.frames.frames import LLMMessagesFrame
+    from pipecat.frames.frames import Frame, LLMMessagesFrame, TextFrame
     from pipecat.pipeline.pipeline import Pipeline
     from pipecat.pipeline.task import PipelineParams, PipelineTask
     from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
+    from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
     from nvidia_pipecat.pipeline.ace_pipeline_runner import ACEPipelineRunner, PipelineMetadata
     from nvidia_pipecat.processors.nvidia_context_aggregator import create_nvidia_context_aggregator
@@ -104,6 +105,19 @@ NEMO_POLICY_TEXT = ""
 class _NoOpMemory:
     def save_context(self, _input, _output):
         return None
+
+
+if PIPECAT_AVAILABLE:
+    class MarkdownStripper(FrameProcessor):
+        """Strip markdown formatting from text frames before TTS."""
+
+        _MARKDOWN_RE = re.compile(r'[*_~`#]+')
+
+        async def process_frame(self, frame: Frame, direction: FrameDirection):
+            await super().process_frame(frame, direction)
+            if isinstance(frame, TextFrame) and frame.text:
+                frame.text = self._MARKDOWN_RE.sub('', frame.text)
+            await self.push_frame(frame, direction)
 
 
 def get_session_words(session_id: str) -> List[str]:
@@ -335,7 +349,7 @@ if PIPECAT_AVAILABLE:
 
         tts = NvidiaTTSService(
             api_key=os.getenv("NVIDIA_API_KEY"),
-            voice_id=os.getenv("RIVA_TTS_VOICE_ID", "Magpie-Multilingual.EN-US.Aria"),
+            voice_id=os.getenv("RIVA_TTS_VOICE_ID", "Magpie-Multilingual.EN-US.Mia"),
             sample_rate=16000,
         )
 
@@ -374,6 +388,8 @@ if PIPECAT_AVAILABLE:
         context = OpenAILLMContext(messages)
         context_aggregator = create_nvidia_context_aggregator(context, send_interims=False)
 
+        md_stripper = MarkdownStripper()
+
         pipeline = Pipeline(
             [
                 transport.input(),
@@ -381,6 +397,7 @@ if PIPECAT_AVAILABLE:
                 stt_transcript_synchronization,
                 context_aggregator.user(),
                 llm,
+                md_stripper,
                 tts,
                 tts_transcript_synchronization,
                 transport.output(),
