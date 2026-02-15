@@ -183,22 +183,53 @@ Open `http://localhost:8080` to access the test UI.
 
 ## Deploy to Kubernetes
 
+Pre-requisites: a microk8s cluster with the `spellingbee` namespace, a local
+container registry at `localhost:32000`, and GPU nodes with the NVIDIA runtime.
+
+**1. Create secrets**
+
 ```bash
-# Deploy vLLM model + backend together
+# NVIDIA API key (required for Riva ASR/TTS)
+kubectl -n spellingbee create secret generic nvidia-api-key \
+  --from-literal=api-key=<YOUR_KEY>
+
+# HuggingFace token (required for vLLM model download)
+kubectl -n spellingbee create secret generic hf-token \
+  --from-literal=token=<YOUR_HF_TOKEN>
+```
+
+**2. Deploy everything (model + backend)**
+
+```bash
 ./deploy/deploy_all.sh
+```
 
-# Or separately
-./deploy/deploy_model.sh      # vLLM vision-language model (GPU node)
-./deploy/deploy_backend.sh    # FastAPI backend (controller node)
+Or deploy individually:
 
-# With secret creation
+```bash
+./deploy/deploy_model.sh      # vLLM Nemotron-Nano-VL-8B on GPU node
+./deploy/deploy_backend.sh    # FastAPI backend on controller node
+```
+
+The backend script builds the Docker image, pushes it to the local registry,
+applies the K8s manifest, and waits for rollout. To create the NVIDIA API key
+secret in the same step:
+
+```bash
 CREATE_SECRET=true NVIDIA_API_KEY_VALUE=<key> ./deploy/deploy_backend.sh
 ```
 
-## Smoke Test
+**3. Verify**
 
 ```bash
-./deploy/smoke_test.sh http://localhost:8080 ./path/to/words-image.png
+kubectl -n spellingbee get pods -o wide
+kubectl -n spellingbee get svc
+```
+
+**4. Smoke test**
+
+```bash
+./deploy/smoke_test.sh http://<controller-ip>:30088 ./path/to/words-image.png
 ```
 
 ## API
