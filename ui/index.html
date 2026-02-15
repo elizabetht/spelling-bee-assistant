@@ -859,8 +859,10 @@ registerProcessor('capture-processor', CaptureProcessor);
 
         if (frame.type === 'audio') {
           audioFrameCount++;
-          if (audioFrameCount <= 3) {
-            console.log('[Audio] frame#', audioFrameCount, 'size:', frame.pcm.length, 'rate:', frame.sampleRate);
+          if (audioFrameCount <= 5) {
+            console.log('[Audio] frame#', audioFrameCount, 'size:', frame.pcm.length, 'rate:', frame.sampleRate,
+              'first4:', Array.from(frame.pcm.slice(0, 4)).map(b => b.toString(16).padStart(2, '0')).join(' '),
+              'ctxState:', playbackCtx?.state);
           }
           playAudioChunk(frame.pcm, frame.sampleRate);
         } else if (frame.type === 'transcription') {
@@ -1017,7 +1019,28 @@ registerProcessor('capture-processor', CaptureProcessor);
     }
 
     // ===================== Audio Playback =====================
-    function playAudioChunk(pcmBytes, sampleRate) {
+    // Find the "data" sub-chunk in a WAV file and return the PCM byte offset + length
+    function findWavDataChunk(buf) {
+      // Minimum WAV: RIFF(4) + size(4) + WAVE(4) + fmt (8+16) + data(8) = 44
+      if (buf.length < 44) return null;
+      if (buf[0] !== 0x52 || buf[1] !== 0x49 || buf[2] !== 0x46 || buf[3] !== 0x46) return null; // "RIFF"
+      // Walk sub-chunks after "WAVE" at offset 12
+      let pos = 12;
+      while (pos + 8 <= buf.length) {
+        const id = String.fromCharCode(buf[pos], buf[pos+1], buf[pos+2], buf[pos+3]);
+        const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+        const chunkSize = view.getUint32(pos + 4, true);
+        if (id === 'data') {
+          return { offset: pos + 8, length: chunkSize };
+        }
+        pos += 8 + chunkSize;
+        // Chunks are word-aligned
+        if (chunkSize % 2 !== 0) pos++;
+      }
+      return null;
+    }
+
+    function playAudioChunk(audioBytes, sampleRate) {
       if (!playbackCtx) {
         console.warn('[Audio] No playback context, dropping chunk');
         return;
@@ -1032,49 +1055,53 @@ registerProcessor('capture-processor', CaptureProcessor);
       const now = playbackCtx.currentTime;
       const diff = now - lastMessageTime;
       if (nextPlayTime === 0 || diff > PLAY_TIME_RESET_THRESHOLD) {
-        nextPlayTime = now;
+        nextPlayTime = now + 0.05; // small buffer to avoid scheduling in the past
+      }
+      // If nextPlayTime fell behind current time, catch up
+      if (nextPlayTime < now) {
+        nextPlayTime = now + 0.02;
       }
       lastMessageTime = now;
 
-      // Copy bytes so we have a standalone ArrayBuffer for decodeAudioData
-      const audioArray = new Uint8Array(Array.from(pcmBytes));
+      // Extract PCM data — strip WAV header if present
+      let pcmData = audioBytes;
+      const rate = sampleRate || 16000;
 
-      // Try decodeAudioData first (handles WAV-wrapped audio from add_wav_header=True)
-      playbackCtx.decodeAudioData(audioArray.buffer,
-        function onSuccess(buffer) {
-          const source = new AudioBufferSourceNode(playbackCtx);
-          source.buffer = buffer;
-          source.connect(playbackCtx.destination);
-          source.start(nextPlayTime);
-          nextPlayTime += buffer.duration;
-          activeSources.push(source);
-          source.onended = () => {
-            const idx = activeSources.indexOf(source);
-            if (idx >= 0) activeSources.splice(idx, 1);
-          };
-        },
-        function onError() {
-          // Fallback: treat as raw PCM int16 LE (for raw/headerless audio)
-          let data = pcmBytes;
-          if (data.length > 44 && data[0] === 0x52 && data[1] === 0x49 && data[2] === 0x46 && data[3] === 0x46) {
-            data = data.slice(44);
-          }
-          const numSamples = Math.floor(data.length / 2);
-          if (numSamples <= 0) return;
-          const rate = sampleRate || 16000;
-          const audioBuffer = playbackCtx.createBuffer(1, numSamples, rate);
-          const channelData = audioBuffer.getChannelData(0);
-          const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-          for (let i = 0; i < numSamples; i++) {
-            channelData[i] = view.getInt16(i * 2, true) / 32768;
-          }
-          const source = playbackCtx.createBufferSource();
-          source.buffer = audioBuffer;
-          source.connect(playbackCtx.destination);
-          source.start(nextPlayTime);
-          nextPlayTime += audioBuffer.duration;
+      const wavChunk = findWavDataChunk(audioBytes);
+      if (wavChunk) {
+        pcmData = audioBytes.slice(wavChunk.offset, wavChunk.offset + wavChunk.length);
+        if (audioFrameCount <= 3) {
+          console.log('[Audio] WAV header found, PCM offset:', wavChunk.offset, 'length:', wavChunk.length);
         }
-      );
+      } else if (audioFrameCount <= 3) {
+        console.log('[Audio] No WAV header, treating as raw PCM, length:', audioBytes.length);
+      }
+
+      const numSamples = Math.floor(pcmData.length / 2);
+      if (numSamples <= 0) return;
+
+      // Convert int16 LE PCM to float32
+      const audioBuffer = playbackCtx.createBuffer(1, numSamples, rate);
+      const channelData = audioBuffer.getChannelData(0);
+      const view = new DataView(pcmData.buffer, pcmData.byteOffset, pcmData.byteLength);
+      for (let i = 0; i < numSamples; i++) {
+        channelData[i] = view.getInt16(i * 2, true) / 32768.0;
+      }
+
+      const source = playbackCtx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(playbackCtx.destination);
+      source.start(nextPlayTime);
+      nextPlayTime += audioBuffer.duration;
+      activeSources.push(source);
+      source.onended = () => {
+        const idx = activeSources.indexOf(source);
+        if (idx >= 0) activeSources.splice(idx, 1);
+      };
+
+      if (audioFrameCount <= 5) {
+        console.log('[Audio] Scheduled', numSamples, 'samples at', rate, 'Hz, duration:', audioBuffer.duration.toFixed(3), 's, playAt:', nextPlayTime.toFixed(3));
+      }
     }
 
     // ===================== Mute / End =====================
