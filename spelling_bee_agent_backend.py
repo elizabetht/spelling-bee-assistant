@@ -58,9 +58,9 @@ try:
         router as websocket_router,
     )
 
-    # Cloud-hosted ASR (ElevenLabs Scribe) + TTS (Magpie via NVIDIA Cloud)
+    # Cloud-hosted ASR + TTS (both ElevenLabs)
     from pipecat.services.elevenlabs.stt import ElevenLabsRealtimeSTTService
-    from pipecat.services.nvidia.tts import NvidiaTTSService
+    from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 
     PIPECAT_AVAILABLE = True
 except ImportError:
@@ -360,10 +360,10 @@ if PIPECAT_AVAILABLE:
             sample_rate=16000,
         )
 
-        tts = NvidiaTTSService(
-            api_key=os.getenv("NVIDIA_API_KEY"),
-            voice_id=os.getenv("RIVA_TTS_VOICE_ID", "Magpie-Multilingual.EN-US.Mia"),
-            sample_rate=16000,
+        tts = ElevenLabsTTSService(
+            api_key=os.getenv("ELEVENLABS_API_KEY"),
+            voice_id=os.getenv("ELEVENLABS_TTS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM"),
+            model="eleven_turbo_v2_5",
         )
 
         stt_transcript_synchronization = UserTranscriptSynchronization()
