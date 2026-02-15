@@ -5,97 +5,827 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Spelling Bee Assistant</title>
     <style>
-      body { font-family: Arial, sans-serif; margin: 2rem; max-width: 720px; }
-      .card { border: 1px solid #ddd; border-radius: 8px; padding: 1rem; margin-top: 1rem; }
-      button { padding: 0.5rem 0.9rem; }
-      code, pre { background: #f5f5f5; padding: 0.2rem 0.4rem; border-radius: 4px; }
-      .muted { color: #666; }
-      .ok { color: #0a7d2b; }
-      .err { color: #b00020; }
+      :root {
+        --bg: #fafafa;
+        --card-bg: #ffffff;
+        --border: #e0e0e0;
+        --primary: #1a73e8;
+        --primary-hover: #1557b0;
+        --danger: #d93025;
+        --danger-hover: #b3261e;
+        --success: #0d904f;
+        --text: #202124;
+        --text-muted: #5f6368;
+        --bot-bg: #e8f0fe;
+        --user-bg: #f1f3f4;
+        --radius: 12px;
+      }
+
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+
+      body {
+        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      header {
+        width: 100%;
+        padding: 1rem 1.5rem;
+        background: var(--card-bg);
+        border-bottom: 1px solid var(--border);
+        text-align: center;
+      }
+
+      header h1 {
+        font-size: 1.4rem;
+        font-weight: 600;
+      }
+
+      header p {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        margin-top: 0.25rem;
+      }
+
+      main {
+        width: 100%;
+        max-width: 640px;
+        padding: 1.5rem;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* --- Step cards --- */
+      .step {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        transition: opacity 0.3s;
+      }
+
+      .step.hidden { display: none; }
+
+      .step h2 {
+        font-size: 1rem;
+        font-weight: 600;
+        margin-bottom: 0.75rem;
+      }
+
+      .step-num {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.5rem;
+        height: 1.5rem;
+        border-radius: 50%;
+        background: var(--primary);
+        color: #fff;
+        font-size: 0.75rem;
+        font-weight: 700;
+        margin-right: 0.5rem;
+      }
+
+      .step-num.done {
+        background: var(--success);
+      }
+
+      /* --- Upload area --- */
+      .drop-zone {
+        border: 2px dashed var(--border);
+        border-radius: var(--radius);
+        padding: 2rem;
+        text-align: center;
+        cursor: pointer;
+        transition: border-color 0.2s, background 0.2s;
+        position: relative;
+      }
+
+      .drop-zone:hover,
+      .drop-zone.dragover {
+        border-color: var(--primary);
+        background: #e8f0fe44;
+      }
+
+      .drop-zone input[type="file"] {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        cursor: pointer;
+      }
+
+      .drop-zone-icon {
+        font-size: 2rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .drop-zone-text {
+        color: var(--text-muted);
+        font-size: 0.9rem;
+      }
+
+      .upload-status {
+        margin-top: 0.75rem;
+        font-size: 0.9rem;
+        min-height: 1.4rem;
+      }
+
+      .upload-status.ok { color: var(--success); font-weight: 600; }
+      .upload-status.err { color: var(--danger); }
+      .upload-status.loading { color: var(--text-muted); }
+
+      /* --- Buttons --- */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        padding: 0.65rem 1.25rem;
+        border: none;
+        border-radius: 8px;
+        font-size: 0.95rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.2s, transform 0.1s;
+      }
+
+      .btn:active { transform: scale(0.97); }
+      .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+      .btn-primary {
+        background: var(--primary);
+        color: #fff;
+      }
+
+      .btn-primary:hover:not(:disabled) {
+        background: var(--primary-hover);
+      }
+
+      .btn-danger {
+        background: var(--danger);
+        color: #fff;
+      }
+
+      .btn-danger:hover:not(:disabled) {
+        background: var(--danger-hover);
+      }
+
+      .btn-outline {
+        background: transparent;
+        color: var(--text);
+        border: 1px solid var(--border);
+      }
+
+      .btn-outline:hover:not(:disabled) {
+        background: var(--user-bg);
+      }
+
+      /* --- Session view --- */
+      #sessionView {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .session-status {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem 1rem;
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        margin-bottom: 0.75rem;
+      }
+
+      .mic-indicator {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #aaa;
+        transition: background 0.3s;
+        flex-shrink: 0;
+      }
+
+      .mic-indicator.listening {
+        background: var(--success);
+        box-shadow: 0 0 6px #0d904f88;
+        animation: pulse 1.5s infinite;
+      }
+
+      .mic-indicator.bot-speaking {
+        background: var(--primary);
+        box-shadow: 0 0 6px #1a73e888;
+        animation: pulse 1s infinite;
+      }
+
+      .mic-indicator.muted {
+        background: var(--danger);
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+      }
+
+      .status-label {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        flex: 1;
+      }
+
+      .session-controls {
+        display: flex;
+        gap: 0.5rem;
+      }
+
+      /* --- Transcript --- */
+      .transcript {
+        flex: 1;
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 1rem;
+        overflow-y: auto;
+        min-height: 300px;
+        max-height: calc(100vh - 360px);
+      }
+
+      .transcript-entry {
+        margin-bottom: 0.75rem;
+        animation: fadeIn 0.2s ease-in;
+      }
+
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(4px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      .transcript-label {
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        margin-bottom: 0.2rem;
+      }
+
+      .transcript-label.user { color: var(--text-muted); }
+      .transcript-label.bot { color: var(--primary); }
+
+      .transcript-text {
+        padding: 0.5rem 0.75rem;
+        border-radius: 8px;
+        font-size: 0.95rem;
+        line-height: 1.4;
+        display: inline-block;
+        max-width: 90%;
+      }
+
+      .transcript-entry.user .transcript-text {
+        background: var(--user-bg);
+      }
+
+      .transcript-entry.bot .transcript-text {
+        background: var(--bot-bg);
+      }
+
+      .transcript-text.interim {
+        opacity: 0.6;
+        font-style: italic;
+      }
+
+      .transcript-empty {
+        text-align: center;
+        color: var(--text-muted);
+        padding: 3rem 1rem;
+        font-size: 0.9rem;
+      }
     </style>
   </head>
   <body>
-    <h1>Spelling Bee Assistant</h1>
-    <p class="muted">Upload a spelling word-list image and get a session ID for Pipecat.</p>
+    <header>
+      <h1>Spelling Bee Assistant</h1>
+      <p>Practice spelling with a voice-powered AI tutor</p>
+    </header>
 
-    <div class="card">
-      <h3>1) Backend status</h3>
-      <button id="checkHealth">Check /healthz</button>
-      <p id="healthOut" class="muted"></p>
-    </div>
+    <main>
+      <!-- Step 1: Upload -->
+      <div id="stepUpload" class="step">
+        <h2><span class="step-num" id="uploadNum">1</span>Upload Word List</h2>
+        <div class="drop-zone" id="dropZone">
+          <input type="file" id="imageFile" accept="image/*" />
+          <div class="drop-zone-icon">&#128247;</div>
+          <div class="drop-zone-text">
+            Drop a word list image here or click to browse
+          </div>
+        </div>
+        <div class="upload-status" id="uploadStatus"></div>
+      </div>
 
-    <div class="card">
-      <h3>2) Upload image</h3>
-      <input type="file" id="imageFile" accept="image/*" />
-      <button id="uploadBtn">Upload</button>
-      <p id="uploadStatus" class="muted"></p>
-      <pre id="uploadJson"></pre>
-    </div>
+      <!-- Step 2: Connect -->
+      <div id="stepConnect" class="step hidden">
+        <h2><span class="step-num">2</span>Start Session</h2>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">
+          This will request microphone access and connect to the spelling tutor.
+        </p>
+        <button class="btn btn-primary" id="startBtn">Start Session</button>
+      </div>
 
-    <div class="card">
-      <h3>3) Connect Pipecat</h3>
-      <p>WebSocket URL:</p>
-      <code id="wsUrl">(upload first)</code>
-      <p class="muted">Use this URL in your Pipecat/voice client.</p>
-    </div>
+      <!-- Step 3: Session -->
+      <div id="sessionView" class="hidden">
+        <div class="session-status">
+          <div class="mic-indicator" id="micIndicator"></div>
+          <span class="status-label" id="statusLabel">Connecting...</span>
+          <div class="session-controls">
+            <button class="btn btn-outline" id="muteBtn" title="Mute microphone">Mute</button>
+            <button class="btn btn-danger" id="endBtn">End</button>
+          </div>
+        </div>
+        <div class="transcript" id="transcript">
+          <div class="transcript-empty">Waiting for conversation to start...</div>
+        </div>
+      </div>
+    </main>
 
     <script>
-      const healthOut = document.getElementById('healthOut');
-      const uploadStatus = document.getElementById('uploadStatus');
-      const uploadJson = document.getElementById('uploadJson');
-      const wsUrl = document.getElementById('wsUrl');
+    // ===================== Audio Worklet Processor (inline) =====================
+    const workletCode = `
+class CaptureProcessor extends AudioWorkletProcessor {
+  constructor(options) {
+    super();
+    this.targetRate = 16000;
+    this.nativeRate = options.processorOptions.sampleRate || sampleRate;
+    this.ratio = this.nativeRate / this.targetRate;
+    // 32ms at 16kHz = 512 samples
+    this.chunkSize = 512;
+    this.buffer = new Float32Array(0);
+    this.resamplePos = 0;
+    this.muted = false;
+    this.port.onmessage = (e) => {
+      if (e.data.type === 'mute') this.muted = e.data.value;
+    };
+  }
 
-      document.getElementById('checkHealth').addEventListener('click', async () => {
-        healthOut.textContent = 'Checking...';
-        try {
-          const res = await fetch('/healthz');
-          const data = await res.json();
-          healthOut.className = 'ok';
-          healthOut.textContent = `OK: ${JSON.stringify(data)}`;
-        } catch (err) {
-          healthOut.className = 'err';
-          healthOut.textContent = `Failed: ${err}`;
-        }
-      });
+  process(inputs) {
+    const input = inputs[0];
+    if (!input || !input[0]) return true;
+    const samples = input[0];
 
-      document.getElementById('uploadBtn').addEventListener('click', async () => {
-        const fileInput = document.getElementById('imageFile');
-        if (!fileInput.files.length) {
-          uploadStatus.className = 'err';
-          uploadStatus.textContent = 'Please choose an image file first.';
+    // Resample to 16kHz using linear interpolation
+    const outputLen = Math.floor(samples.length / this.ratio);
+    const resampled = new Float32Array(outputLen);
+    for (let i = 0; i < outputLen; i++) {
+      const srcIdx = i * this.ratio;
+      const idx0 = Math.floor(srcIdx);
+      const idx1 = Math.min(idx0 + 1, samples.length - 1);
+      const frac = srcIdx - idx0;
+      resampled[i] = samples[idx0] * (1 - frac) + samples[idx1] * frac;
+    }
+
+    // Append to buffer
+    const newBuf = new Float32Array(this.buffer.length + resampled.length);
+    newBuf.set(this.buffer);
+    newBuf.set(resampled, this.buffer.length);
+    this.buffer = newBuf;
+
+    // Emit 512-sample chunks
+    while (this.buffer.length >= this.chunkSize) {
+      const chunk = this.buffer.slice(0, this.chunkSize);
+      this.buffer = this.buffer.slice(this.chunkSize);
+
+      // Convert float32 to int16
+      const pcm = new Int16Array(this.chunkSize);
+      for (let i = 0; i < this.chunkSize; i++) {
+        const s = this.muted ? 0 : Math.max(-1, Math.min(1, chunk[i]));
+        pcm[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      }
+      this.port.postMessage({ type: 'audio', pcm: pcm.buffer }, [pcm.buffer]);
+    }
+    return true;
+  }
+}
+registerProcessor('capture-processor', CaptureProcessor);
+`;
+
+    // ===================== State =====================
+    let sessionId = null;
+    let ws = null;
+    let audioCtx = null;
+    let micStream = null;
+    let workletNode = null;
+    let isMuted = false;
+    let isBotSpeaking = false;
+
+    // Playback queue
+    let playbackCtx = null;
+    let nextPlayTime = 0;
+
+    // Transcript
+    let currentUserEntry = null;
+    let currentBotEntry = null;
+
+    // ===================== DOM refs =====================
+    const stepUpload = document.getElementById('stepUpload');
+    const stepConnect = document.getElementById('stepConnect');
+    const sessionView = document.getElementById('sessionView');
+    const uploadNum = document.getElementById('uploadNum');
+    const dropZone = document.getElementById('dropZone');
+    const imageFile = document.getElementById('imageFile');
+    const uploadStatus = document.getElementById('uploadStatus');
+    const startBtn = document.getElementById('startBtn');
+    const muteBtn = document.getElementById('muteBtn');
+    const endBtn = document.getElementById('endBtn');
+    const micIndicator = document.getElementById('micIndicator');
+    const statusLabel = document.getElementById('statusLabel');
+    const transcript = document.getElementById('transcript');
+
+    // ===================== Upload =====================
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('dragover');
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) {
+        imageFile.files = e.dataTransfer.files;
+        handleUpload(e.dataTransfer.files[0]);
+      }
+    });
+
+    imageFile.addEventListener('change', () => {
+      if (imageFile.files.length) {
+        handleUpload(imageFile.files[0]);
+      }
+    });
+
+    async function handleUpload(file) {
+      uploadStatus.className = 'upload-status loading';
+      uploadStatus.textContent = 'Uploading and processing...';
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        const res = await fetch('/upload-image', { method: 'POST', body: formData });
+        const data = await res.json();
+
+        if (!res.ok) {
+          uploadStatus.className = 'upload-status err';
+          uploadStatus.textContent = `Upload failed: ${data.detail || res.statusText}`;
           return;
         }
 
-        uploadStatus.className = 'muted';
-        uploadStatus.textContent = 'Uploading...';
-        uploadJson.textContent = '';
+        sessionId = data.session_id;
+        const wordCount = data.words ? data.words.length : 0;
 
-        const formData = new FormData();
-        formData.append('file', fileInput.files[0]);
+        uploadStatus.className = 'upload-status ok';
+        uploadStatus.textContent = `${wordCount} word${wordCount !== 1 ? 's' : ''} loaded`;
 
-        try {
-          const res = await fetch('/upload-image', { method: 'POST', body: formData });
-          const data = await res.json();
+        // Mark step 1 done, show step 2
+        uploadNum.classList.add('done');
+        uploadNum.textContent = '\u2713';
+        stepConnect.classList.remove('hidden');
+        stepConnect.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } catch (err) {
+        uploadStatus.className = 'upload-status err';
+        uploadStatus.textContent = `Upload failed: ${err.message}`;
+      }
+    }
 
-          if (!res.ok) {
-            uploadStatus.className = 'err';
-            uploadStatus.textContent = `Upload failed (${res.status})`;
-            uploadJson.textContent = JSON.stringify(data, null, 2);
-            return;
+    // ===================== Start Session =====================
+    startBtn.addEventListener('click', startSession);
+
+    async function startSession() {
+      startBtn.disabled = true;
+      startBtn.textContent = 'Connecting...';
+
+      try {
+        // Request mic access
+        micStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            sampleRate: 16000,
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
           }
+        });
 
-          uploadStatus.className = 'ok';
-          uploadStatus.textContent = 'Upload succeeded.';
-          uploadJson.textContent = JSON.stringify(data, null, 2);
+        // Set up AudioContext for capture
+        audioCtx = new AudioContext({ sampleRate: micStream.getAudioTracks()[0].getSettings().sampleRate || 44100 });
 
-          const sessionId = data.session_id;
-          const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-          wsUrl.textContent = `${protocol}//${location.host}/pipecat/ws?session_id=${sessionId}`;
-        } catch (err) {
-          uploadStatus.className = 'err';
-          uploadStatus.textContent = `Upload failed: ${err}`;
+        // Load worklet
+        const blob = new Blob([workletCode], { type: 'application/javascript' });
+        const url = URL.createObjectURL(blob);
+        await audioCtx.audioWorklet.addModule(url);
+        URL.revokeObjectURL(url);
+
+        workletNode = new AudioWorkletNode(audioCtx, 'capture-processor', {
+          processorOptions: { sampleRate: audioCtx.sampleRate }
+        });
+
+        workletNode.port.onmessage = (e) => {
+          if (e.data.type === 'audio' && ws && ws.readyState === WebSocket.OPEN) {
+            const pcmBuf = e.data.pcm;
+            const wavBuf = createWavChunk(new Int16Array(pcmBuf));
+            ws.send(wavBuf);
+          }
+        };
+
+        const source = audioCtx.createMediaStreamSource(micStream);
+        source.connect(workletNode);
+        // Don't connect worklet to destination (no feedback)
+
+        // Set up playback context
+        playbackCtx = new AudioContext({ sampleRate: 16000 });
+        nextPlayTime = 0;
+
+        // Open WebSocket
+        const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${location.host}/pipecat/ws?session_id=${sessionId}`;
+        ws = new WebSocket(wsUrl);
+        ws.binaryType = 'arraybuffer';
+
+        ws.addEventListener('open', () => {
+          // Show session view
+          stepUpload.classList.add('hidden');
+          stepConnect.classList.add('hidden');
+          sessionView.classList.remove('hidden');
+          statusLabel.textContent = 'Listening...';
+          micIndicator.className = 'mic-indicator listening';
+        });
+
+        ws.addEventListener('message', handleWsMessage);
+
+        ws.addEventListener('close', (e) => {
+          statusLabel.textContent = 'Session ended';
+          micIndicator.className = 'mic-indicator';
+          cleanup();
+        });
+
+        ws.addEventListener('error', () => {
+          statusLabel.textContent = 'Connection error';
+          micIndicator.className = 'mic-indicator';
+          cleanup();
+        });
+
+      } catch (err) {
+        startBtn.disabled = false;
+        startBtn.textContent = 'Start Session';
+        if (err.name === 'NotAllowedError') {
+          alert('Microphone access is required for voice interaction. Please allow microphone access and try again.');
+        } else {
+          alert(`Failed to start session: ${err.message}`);
         }
-      });
+      }
+    }
+
+    // ===================== WAV helpers =====================
+    function createWavChunk(pcmInt16) {
+      const numSamples = pcmInt16.length;
+      const dataSize = numSamples * 2;
+      const buffer = new ArrayBuffer(44 + dataSize);
+      const view = new DataView(buffer);
+
+      // RIFF header
+      writeString(view, 0, 'RIFF');
+      view.setUint32(4, 36 + dataSize, true);
+      writeString(view, 8, 'WAVE');
+
+      // fmt chunk
+      writeString(view, 12, 'fmt ');
+      view.setUint32(16, 16, true);         // chunk size
+      view.setUint16(20, 1, true);           // PCM format
+      view.setUint16(22, 1, true);           // mono
+      view.setUint32(24, 16000, true);       // sample rate
+      view.setUint32(28, 32000, true);       // byte rate
+      view.setUint16(32, 2, true);           // block align
+      view.setUint16(34, 16, true);          // bits per sample
+
+      // data chunk
+      writeString(view, 36, 'data');
+      view.setUint32(40, dataSize, true);
+
+      // PCM data
+      const pcmView = new Int16Array(buffer, 44);
+      pcmView.set(pcmInt16);
+
+      return buffer;
+    }
+
+    function writeString(view, offset, str) {
+      for (let i = 0; i < str.length; i++) {
+        view.setUint8(offset + i, str.charCodeAt(i));
+      }
+    }
+
+    // ===================== WebSocket message handling =====================
+    function handleWsMessage(event) {
+      if (event.data instanceof ArrayBuffer) {
+        // Binary = audio from server
+        playAudioChunk(event.data);
+      } else {
+        // Text = JSON transcript message
+        try {
+          const msg = JSON.parse(event.data);
+          handleTranscriptMessage(msg);
+        } catch (e) {
+          // Ignore non-JSON text
+        }
+      }
+    }
+
+    function handleTranscriptMessage(msg) {
+      const type = msg.type;
+
+      if (type === 'asr_update') {
+        // Interim user speech
+        if (!currentUserEntry) {
+          currentUserEntry = addTranscriptEntry('user');
+        }
+        updateTranscriptText(currentUserEntry, msg.text || msg.data || '', true);
+      } else if (type === 'asr_end') {
+        // Final user speech
+        if (!currentUserEntry) {
+          currentUserEntry = addTranscriptEntry('user');
+        }
+        updateTranscriptText(currentUserEntry, msg.text || msg.data || '', false);
+        currentUserEntry = null;
+      } else if (type === 'tts_update') {
+        // Bot speaking text
+        isBotSpeaking = true;
+        micIndicator.className = 'mic-indicator bot-speaking';
+        statusLabel.textContent = 'Bot is speaking...';
+
+        if (!currentBotEntry) {
+          currentBotEntry = addTranscriptEntry('bot');
+        }
+        // Accumulate TTS text
+        const existingText = currentBotEntry.querySelector('.transcript-text').textContent;
+        const newText = msg.text || msg.data || '';
+        updateTranscriptText(currentBotEntry, existingText + newText, true);
+      } else if (type === 'tts_end') {
+        // Bot done speaking
+        if (currentBotEntry) {
+          const textEl = currentBotEntry.querySelector('.transcript-text');
+          textEl.classList.remove('interim');
+          currentBotEntry = null;
+        }
+        isBotSpeaking = false;
+        if (!isMuted) {
+          micIndicator.className = 'mic-indicator listening';
+          statusLabel.textContent = 'Listening...';
+        }
+      }
+    }
+
+    // ===================== Transcript UI =====================
+    function addTranscriptEntry(role) {
+      // Remove empty placeholder
+      const empty = transcript.querySelector('.transcript-empty');
+      if (empty) empty.remove();
+
+      const entry = document.createElement('div');
+      entry.className = `transcript-entry ${role}`;
+
+      const label = document.createElement('div');
+      label.className = `transcript-label ${role}`;
+      label.textContent = role === 'user' ? 'You' : 'Tutor';
+
+      const text = document.createElement('div');
+      text.className = 'transcript-text';
+
+      entry.appendChild(label);
+      entry.appendChild(text);
+      transcript.appendChild(entry);
+      transcript.scrollTop = transcript.scrollHeight;
+
+      return entry;
+    }
+
+    function updateTranscriptText(entry, text, interim) {
+      const textEl = entry.querySelector('.transcript-text');
+      textEl.textContent = text;
+      if (interim) {
+        textEl.classList.add('interim');
+      } else {
+        textEl.classList.remove('interim');
+      }
+      transcript.scrollTop = transcript.scrollHeight;
+    }
+
+    // ===================== Audio Playback =====================
+    function playAudioChunk(arrayBuffer) {
+      if (!playbackCtx) return;
+
+      // Parse WAV: extract PCM data after 44-byte header
+      const dataView = new DataView(arrayBuffer);
+      let pcmOffset = 44;
+      let pcmLength = arrayBuffer.byteLength - 44;
+
+      // Validate minimum WAV size
+      if (arrayBuffer.byteLength < 46) return;
+
+      // Try to find actual data chunk offset for robustness
+      if (arrayBuffer.byteLength >= 44) {
+        // Read from header: data size is at byte 40
+        const declaredSize = dataView.getUint32(40, true);
+        if (declaredSize > 0 && declaredSize <= arrayBuffer.byteLength - 44) {
+          pcmLength = declaredSize;
+        }
+      }
+
+      const numSamples = pcmLength / 2;
+      if (numSamples <= 0) return;
+
+      const audioBuffer = playbackCtx.createBuffer(1, numSamples, 16000);
+      const channelData = audioBuffer.getChannelData(0);
+
+      for (let i = 0; i < numSamples; i++) {
+        const sample = dataView.getInt16(pcmOffset + i * 2, true);
+        channelData[i] = sample / 32768;
+      }
+
+      const source = playbackCtx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(playbackCtx.destination);
+
+      const now = playbackCtx.currentTime;
+      if (nextPlayTime < now) {
+        nextPlayTime = now;
+      }
+      source.start(nextPlayTime);
+      nextPlayTime += audioBuffer.duration;
+    }
+
+    // ===================== Mute / End =====================
+    muteBtn.addEventListener('click', () => {
+      isMuted = !isMuted;
+      muteBtn.textContent = isMuted ? 'Unmute' : 'Mute';
+
+      if (workletNode) {
+        workletNode.port.postMessage({ type: 'mute', value: isMuted });
+      }
+
+      if (isMuted) {
+        micIndicator.className = 'mic-indicator muted';
+        statusLabel.textContent = 'Muted';
+      } else if (isBotSpeaking) {
+        micIndicator.className = 'mic-indicator bot-speaking';
+        statusLabel.textContent = 'Bot is speaking...';
+      } else {
+        micIndicator.className = 'mic-indicator listening';
+        statusLabel.textContent = 'Listening...';
+      }
+    });
+
+    endBtn.addEventListener('click', () => {
+      if (ws) ws.close();
+      cleanup();
+      // Return to upload view
+      sessionView.classList.add('hidden');
+      stepUpload.classList.remove('hidden');
+      stepConnect.classList.remove('hidden');
+      // Reset transcript
+      transcript.innerHTML = '<div class="transcript-empty">Waiting for conversation to start...</div>';
+      currentUserEntry = null;
+      currentBotEntry = null;
+      statusLabel.textContent = 'Connecting...';
+    });
+
+    function cleanup() {
+      if (micStream) {
+        micStream.getTracks().forEach(t => t.stop());
+        micStream = null;
+      }
+      if (audioCtx) {
+        audioCtx.close().catch(() => {});
+        audioCtx = null;
+      }
+      if (playbackCtx) {
+        playbackCtx.close().catch(() => {});
+        playbackCtx = null;
+      }
+      workletNode = null;
+      isMuted = false;
+      isBotSpeaking = false;
+      muteBtn.textContent = 'Mute';
+      startBtn.disabled = false;
+      startBtn.textContent = 'Start Session';
+    }
     </script>
   </body>
 </html>
