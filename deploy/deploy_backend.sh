@@ -17,7 +17,7 @@ if [[ ! -f "${MANIFEST}" ]]; then
 fi
 
 echo "[1/6] Building backend image: ${IMAGE}"
-docker build -t "${IMAGE}" .
+DOCKER_BUILDKIT=1 docker build -t "${IMAGE}" .
 
 echo "[2/6] Pushing backend image"
 docker push "${IMAGE}"
