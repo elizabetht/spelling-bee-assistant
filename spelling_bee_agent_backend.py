@@ -394,12 +394,12 @@ if PIPECAT_AVAILABLE:
                 audio_in_enabled=True,
                 audio_out_enabled=True,
                 vad_analyzer=SileroVADAnalyzer(
-                    params=VADParams(
-                        confidence=0.5,
-                        min_volume=0.2,
-                        start_secs=0.2,
-                        stop_secs=0.8,
-                    )
+                    # params=VADParams(
+                    #     confidence=0.5,
+                    #     min_volume=0.2,
+                    #     start_secs=0.2,
+                    #     stop_secs=0.8,
+                    # )
                 ),
                 audio_out_10ms_chunks=20,
             ),
