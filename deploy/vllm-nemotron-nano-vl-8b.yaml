@@ -1,5 +1,5 @@
-# vLLM Nemotron Nano VL 8B Deployment for microk8s
-# Deploys nvidia/Llama-3.1-Nemotron-Nano-VL-8B-V1 using ghcr.io/elizabetht/token-labs/vllm-serve:v0.4.0
+# vLLM Nemotron Nano 12B VL FP8 Deployment for microk8s
+# Deploys nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-FP8 using ghcr.io/elizabetht/token-labs/vllm-serve:v0.4.0
 # Exposes NodePort 30566 for external access
 
 apiVersion: apps/v1
@@ -44,7 +44,7 @@ spec:
             limits:
               nvidia.com/gpu: 1
           args:
-            - "nvidia/Llama-3.1-Nemotron-Nano-VL-8B-V1"
+            - "nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-FP8"
             - "--trust-remote-code"
             - "--gpu-memory-utilization"
             - "0.3"

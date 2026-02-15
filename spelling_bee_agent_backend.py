@@ -89,7 +89,7 @@ session_wordlists = {}  # session_id: [words]
 session_progress = {}   # session_id: {current, incorrect, skipped}
 
 VLLM_VL_BASE = os.getenv("VLLM_VL_BASE", "http://vllm-nemotron-nano-vl-8b:5566/v1")
-VLLM_VL_MODEL = os.getenv("VLLM_VL_MODEL", "nvidia/Llama-3.1-Nemotron-Nano-VL-8B-V1")
+VLLM_VL_MODEL = os.getenv("VLLM_VL_MODEL", "nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-FP8")
 NEMO_GUARDRAILS_CONFIG_PATH = os.getenv("NEMO_GUARDRAILS_CONFIG_PATH", "./guardrails")
 ENABLE_NEMO_GUARDRAILS = os.getenv("ENABLE_NEMO_GUARDRAILS", "true").lower() == "true"
 

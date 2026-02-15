@@ -59,7 +59,7 @@ Students upload a photo of their spelling word list, and the assistant extracts 
 │                                                                            │
 │   ┌──────────────────┐  ┌──────────────┐  ┌────────────────────────────┐  │
 │   ┌───────────────────────────┐  ┌──────────────┐  ┌──────────────────┐  │
-│   │  Nemotron-Nano-VL-8B     │  │  Riva ASR    │  │  Riva TTS        │  │
+│   │  Nemotron-Nano-12B-VL-FP8     │  │  Riva ASR    │  │  Riva TTS        │  │
 │   │  (vLLM, self-hosted)     │  │  Parakeet    │  │  Magpie Sofia    │  │
 │   │                          │  │  1.1B        │  │                  │  │
 │   │  Image → Words           │  │  Speech →    │  │  Text → Speech   │  │
@@ -79,10 +79,10 @@ Students upload a photo of their spelling word list, and the assistant extracts 
 | Component | Technology | Role |
 |---|---|---|
 | **Voice Pipeline** | NVIDIA Pipecat (ACE) | Orchestrates real-time audio I/O, ASR, LLM, and TTS |
-| **Vision-Language Model** | Nemotron-Nano-VL-8B via vLLM | Extracts spelling words from uploaded images |
+| **Vision-Language Model** | Nemotron-Nano-12B-VL-FP8 via vLLM | Extracts spelling words from uploaded images |
 | **Speech Recognition** | Riva ASR (Parakeet 1.1B) | Streaming speech-to-text with VAD |
 | **Text-to-Speech** | Riva TTS (Magpie Sofia) | Natural voice output for the spelling coach |
-| **Conversational LLM** | Nemotron-Nano-VL-8B via vLLM | Powers the interactive spelling coach (same model as VLM) |
+| **Conversational LLM** | Nemotron-Nano-12B-VL-FP8 via vLLM | Powers the interactive spelling coach (same model as VLM) |
 | **Safety** | NeMo Guardrails | Enforces spelling-only scope, filters off-topic intent |
 | **Session Store** | Redis + LangChain | Persistent word lists, progress, and chat history |
 | **Fallback OCR** | Tesseract (pytesseract) | Backup word extraction when VLM is unavailable |
@@ -136,7 +136,7 @@ Students upload a photo of their spelling word list, and the assistant extracts 
 │   │               │                     │   │   ┌────────────────┐ │ │
 │   │   ┌───────────▼───────────────┐     │   │   │  vLLM Pod      │ │ │
 │   │   │  Redis Pod                │     │   │   │  Nemotron-Nano │ │ │
-│   │   │  Session Store            │     │   │   │  VL-8B         │ │ │
+│   │   │  Session Store            │     │   │   │  12B-VL-FP8    │ │ │
 │   │   └───────────────────────────┘     │   │   │  NodePort      │ │ │
 │   │                                     │   │   │  :30566        │ │ │
 │   └─────────────────────────────────────┘   │   │  GPU: GB10     │ │ │
@@ -154,7 +154,7 @@ Students upload a photo of their spelling word list, and the assistant extracts 
 - **NVIDIA Pipecat (ACE)** — Real-time voice agent pipeline framework
 - **Riva ASR** — Automatic speech recognition (Parakeet 1.1B, streaming with Silero VAD)
 - **Riva TTS** — Text-to-speech synthesis (Magpie-Multilingual Sofia EN-US)
-- **Nemotron-Nano-VL-8B** — Vision-language model for image understanding and conversational coaching, served via vLLM
+- **Nemotron-Nano-12B-VL-FP8** — Vision-language model for image understanding and conversational coaching, served via vLLM
 - **NeMo Guardrails** — Programmable safety rails for topic enforcement and content filtering
 - **NVIDIA Container Runtime** — GPU-accelerated container execution
 
@@ -207,7 +207,7 @@ kubectl -n spellingbee create secret generic hf-token \
 Or deploy individually:
 
 ```bash
-./deploy/deploy_model.sh      # vLLM Nemotron-Nano-VL-8B on GPU node
+./deploy/deploy_model.sh      # vLLM Nemotron-Nano-12B-VL-FP8 on GPU node
 ./deploy/deploy_backend.sh    # FastAPI backend on controller node
 ```
 
@@ -273,6 +273,6 @@ spelling-bee-assistant/
 | `NEMO_GUARDRAILS_CONFIG_PATH` | `./guardrails` | Path to guardrails config |
 | `REDIS_URL` | `redis://localhost:6379/0` | Redis connection URL |
 | `VLLM_VL_BASE` | `http://vllm-nemotron-nano-vl-8b:5566/v1` | vLLM endpoint |
-| `VLLM_VL_MODEL` | `nvidia/Llama-3.1-Nemotron-Nano-VL-8B-V1` | Vision-language model |
+| `VLLM_VL_MODEL` | `nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-FP8` | Vision-language model |
 | `NVIDIA_LLM_URL` | Same as `VLLM_VL_BASE` | LLM endpoint for voice pipeline |
 | `NVIDIA_LLM_MODEL` | Same as `VLLM_VL_MODEL` | LLM model for voice pipeline |

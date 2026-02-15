@@ -27,7 +27,7 @@ spec:
             - name: VLLM_VL_BASE
               value: "http://vllm-nemotron-nano-vl-8b:5566/v1"
             - name: VLLM_VL_MODEL
-              value: "nvidia/Llama-3.1-Nemotron-Nano-VL-8B-V1"
+              value: "nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-FP8"
             - name: ENABLE_NEMO_GUARDRAILS
               value: "true"
             - name: NEMO_GUARDRAILS_CONFIG_PATH
@@ -35,7 +35,7 @@ spec:
             - name: NVIDIA_LLM_URL
               value: "http://vllm-nemotron-nano-vl-8b:5566/v1"
             - name: NVIDIA_LLM_MODEL
-              value: "nvidia/Llama-3.1-Nemotron-Nano-VL-8B-V1"
+              value: "nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-FP8"
             - name: RIVA_ASR_URL
               value: "grpc.nvcf.nvidia.com:443"
             - name: RIVA_TTS_URL
