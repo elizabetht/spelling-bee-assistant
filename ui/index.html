@@ -5,102 +5,67 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Spelling Bee Assistant</title>
     <style>
-      :root {
-        --bg: #fafafa;
-        --card-bg: #ffffff;
-        --border: #e0e0e0;
-        --primary: #1a73e8;
-        --primary-hover: #1557b0;
-        --danger: #d93025;
-        --danger-hover: #b3261e;
-        --success: #0d904f;
-        --text: #202124;
-        --text-muted: #5f6368;
-        --bot-bg: #e8f0fe;
-        --user-bg: #f1f3f4;
-        --radius: 12px;
-      }
-
-      * { box-sizing: border-box; margin: 0; padding: 0; }
+      * { box-sizing: border-box; }
 
       body {
-        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-        background: var(--bg);
-        color: var(--text);
-        min-height: 100vh;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        margin: 24px;
+        max-width: 900px;
+        color: #222;
+      }
+
+      h1 { margin-bottom: 4px; }
+
+      .hint { color: #666; }
+
+      .card {
+        border: 1px solid #ddd;
+        border-radius: 12px;
+        padding: 16px;
+        margin: 12px 0;
+      }
+
+      .card.hidden { display: none; }
+
+      .card h2 { margin-top: 0; }
+
+      .row {
         display: flex;
-        flex-direction: column;
-        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
       }
 
-      header {
-        width: 100%;
-        padding: 1rem 1.5rem;
-        background: var(--card-bg);
-        border-bottom: 1px solid var(--border);
-        text-align: center;
+      /* --- Buttons --- */
+      button {
+        padding: 10px 14px;
+        border-radius: 10px;
+        border: 1px solid #bbb;
+        background: #fff;
+        cursor: pointer;
+        font-size: 0.95rem;
       }
 
-      header h1 {
-        font-size: 1.4rem;
-        font-weight: 600;
-      }
-
-      header p {
-        font-size: 0.85rem;
-        color: var(--text-muted);
-        margin-top: 0.25rem;
-      }
-
-      main {
-        width: 100%;
-        max-width: 640px;
-        padding: 1.5rem;
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-      }
-
-      /* --- Step cards --- */
-      .step {
-        background: var(--card-bg);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        padding: 1.5rem;
-        margin-bottom: 1rem;
-        transition: opacity 0.3s;
-      }
-
-      .step.hidden { display: none; }
-
-      .step h2 {
-        font-size: 1rem;
-        font-weight: 600;
-        margin-bottom: 0.75rem;
-      }
-
-      .step-num {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 1.5rem;
-        height: 1.5rem;
-        border-radius: 50%;
-        background: var(--primary);
+      button.primary {
+        background: #111;
         color: #fff;
-        font-size: 0.75rem;
-        font-weight: 700;
-        margin-right: 0.5rem;
+        border-color: #111;
       }
 
-      .step-num.done {
-        background: var(--success);
+      button.danger {
+        background: #c30;
+        color: #fff;
+        border-color: #c30;
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
       }
 
       /* --- Upload area --- */
       .drop-zone {
-        border: 2px dashed var(--border);
-        border-radius: var(--radius);
+        border: 2px dashed #ccc;
+        border-radius: 12px;
         padding: 2rem;
         text-align: center;
         cursor: pointer;
@@ -110,8 +75,8 @@
 
       .drop-zone:hover,
       .drop-zone.dragover {
-        border-color: var(--primary);
-        background: #e8f0fe44;
+        border-color: #111;
+        background: #f5f5f5;
       }
 
       .drop-zone input[type="file"] {
@@ -127,82 +92,29 @@
       }
 
       .drop-zone-text {
-        color: var(--text-muted);
+        color: #666;
         font-size: 0.9rem;
       }
 
       .upload-status {
-        margin-top: 0.75rem;
-        font-size: 0.9rem;
+        margin-top: 10px;
+        font-size: 0.95rem;
         min-height: 1.4rem;
       }
 
-      .upload-status.ok { color: var(--success); font-weight: 600; }
-      .upload-status.err { color: var(--danger); }
-      .upload-status.loading { color: var(--text-muted); }
+      .upload-status.ok { color: #0a7; font-weight: 600; }
+      .upload-status.err { color: #c30; font-weight: 600; }
+      .upload-status.loading { color: #666; }
 
-      /* --- Buttons --- */
-      .btn {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 0.5rem;
-        padding: 0.65rem 1.25rem;
-        border: none;
-        border-radius: 8px;
-        font-size: 0.95rem;
-        font-weight: 600;
-        cursor: pointer;
-        transition: background 0.2s, transform 0.1s;
-      }
-
-      .btn:active { transform: scale(0.97); }
-      .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-      .btn-primary {
-        background: var(--primary);
-        color: #fff;
-      }
-
-      .btn-primary:hover:not(:disabled) {
-        background: var(--primary-hover);
-      }
-
-      .btn-danger {
-        background: var(--danger);
-        color: #fff;
-      }
-
-      .btn-danger:hover:not(:disabled) {
-        background: var(--danger-hover);
-      }
-
-      .btn-outline {
-        background: transparent;
-        color: var(--text);
-        border: 1px solid var(--border);
-      }
-
-      .btn-outline:hover:not(:disabled) {
-        background: var(--user-bg);
-      }
-
-      /* --- Session view --- */
-      #sessionView {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-      }
-
+      /* --- Session status bar --- */
       .session-status {
         display: flex;
         align-items: center;
-        gap: 0.75rem;
-        padding: 0.75rem 1rem;
-        background: var(--card-bg);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        margin-bottom: 0.75rem;
+        gap: 12px;
+        padding: 12px 16px;
+        border: 1px solid #ddd;
+        border-radius: 12px;
+        margin-bottom: 12px;
       }
 
       .mic-indicator {
@@ -215,19 +127,19 @@
       }
 
       .mic-indicator.listening {
-        background: var(--success);
-        box-shadow: 0 0 6px #0d904f88;
+        background: #0a7;
+        box-shadow: 0 0 6px #0a788;
         animation: pulse 1.5s infinite;
       }
 
       .mic-indicator.bot-speaking {
-        background: var(--primary);
-        box-shadow: 0 0 6px #1a73e888;
+        background: #111;
+        box-shadow: 0 0 6px #11188;
         animation: pulse 1s infinite;
       }
 
       .mic-indicator.muted {
-        background: var(--danger);
+        background: #c30;
       }
 
       @keyframes pulse {
@@ -236,30 +148,28 @@
       }
 
       .status-label {
-        font-size: 0.85rem;
-        color: var(--text-muted);
+        font-size: 0.9rem;
+        color: #666;
         flex: 1;
       }
 
       .session-controls {
         display: flex;
-        gap: 0.5rem;
+        gap: 8px;
       }
 
       /* --- Transcript --- */
       .transcript {
-        flex: 1;
-        background: var(--card-bg);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        padding: 1rem;
+        border: 1px solid #ddd;
+        border-radius: 12px;
+        padding: 16px;
         overflow-y: auto;
         min-height: 300px;
-        max-height: calc(100vh - 360px);
+        max-height: calc(100vh - 300px);
       }
 
       .transcript-entry {
-        margin-bottom: 0.75rem;
+        margin-bottom: 12px;
         animation: fadeIn 0.2s ease-in;
       }
 
@@ -273,15 +183,15 @@
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.03em;
-        margin-bottom: 0.2rem;
+        margin-bottom: 2px;
       }
 
-      .transcript-label.user { color: var(--text-muted); }
-      .transcript-label.bot { color: var(--primary); }
+      .transcript-label.user { color: #666; }
+      .transcript-label.bot { color: #111; }
 
       .transcript-text {
-        padding: 0.5rem 0.75rem;
-        border-radius: 8px;
+        padding: 8px 12px;
+        border-radius: 10px;
         font-size: 0.95rem;
         line-height: 1.4;
         display: inline-block;
@@ -289,11 +199,11 @@
       }
 
       .transcript-entry.user .transcript-text {
-        background: var(--user-bg);
+        background: #f1f3f4;
       }
 
       .transcript-entry.bot .transcript-text {
-        background: var(--bot-bg);
+        background: #f0f9f4;
       }
 
       .transcript-text.interim {
@@ -303,22 +213,19 @@
 
       .transcript-empty {
         text-align: center;
-        color: var(--text-muted);
+        color: #666;
         padding: 3rem 1rem;
-        font-size: 0.9rem;
+        font-size: 0.95rem;
       }
     </style>
   </head>
   <body>
-    <header>
-      <h1>Spelling Bee Assistant</h1>
-      <p>Practice spelling with a voice-powered AI tutor</p>
-    </header>
+    <h1>Spelling Bee Assistant</h1>
+    <p class="hint">Practice spelling with a voice-powered AI tutor</p>
 
-    <main>
       <!-- Step 1: Upload -->
-      <div id="stepUpload" class="step">
-        <h2><span class="step-num" id="uploadNum">1</span>Upload Word List</h2>
+      <div id="stepUpload" class="card">
+        <h2>1) Upload word list image</h2>
         <div class="drop-zone" id="dropZone">
           <input type="file" id="imageFile" accept="image/*" />
           <div class="drop-zone-icon">&#128247;</div>
@@ -330,29 +237,29 @@
       </div>
 
       <!-- Step 2: Connect -->
-      <div id="stepConnect" class="step hidden">
-        <h2><span class="step-num">2</span>Start Session</h2>
-        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">
+      <div id="stepConnect" class="card hidden">
+        <h2>2) Start session</h2>
+        <p class="hint" style="margin-bottom: 12px;">
           This will request microphone access and connect to the spelling tutor.
         </p>
-        <button class="btn btn-primary" id="startBtn">Start Session</button>
+        <button class="primary" id="startBtn">Start Session</button>
       </div>
 
       <!-- Step 3: Session -->
-      <div id="sessionView" class="hidden">
+      <div id="sessionView" class="card hidden">
+        <h2>3) Voice session</h2>
         <div class="session-status">
           <div class="mic-indicator" id="micIndicator"></div>
           <span class="status-label" id="statusLabel">Connecting...</span>
           <div class="session-controls">
-            <button class="btn btn-outline" id="muteBtn" title="Mute microphone">Mute</button>
-            <button class="btn btn-danger" id="endBtn">End</button>
+            <button id="muteBtn" title="Mute microphone">Mute</button>
+            <button class="danger" id="endBtn">End Session</button>
           </div>
         </div>
         <div class="transcript" id="transcript">
           <div class="transcript-empty">Waiting for conversation to start...</div>
         </div>
       </div>
-    </main>
 
     <script>
     // ===================== Audio Worklet Processor (inline) =====================
@@ -435,7 +342,6 @@ registerProcessor('capture-processor', CaptureProcessor);
     const stepUpload = document.getElementById('stepUpload');
     const stepConnect = document.getElementById('stepConnect');
     const sessionView = document.getElementById('sessionView');
-    const uploadNum = document.getElementById('uploadNum');
     const dropZone = document.getElementById('dropZone');
     const imageFile = document.getElementById('imageFile');
     const uploadStatus = document.getElementById('uploadStatus');
@@ -494,9 +400,7 @@ registerProcessor('capture-processor', CaptureProcessor);
         uploadStatus.className = 'upload-status ok';
         uploadStatus.textContent = `${wordCount} word${wordCount !== 1 ? 's' : ''} loaded`;
 
-        // Mark step 1 done, show step 2
-        uploadNum.classList.add('done');
-        uploadNum.textContent = '\u2713';
+        // Show step 2
         stepConnect.classList.remove('hidden');
         stepConnect.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       } catch (err) {
