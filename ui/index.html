@@ -647,7 +647,7 @@ registerProcessor('capture-processor', CaptureProcessor);
 
         // Open WebSocket
         const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${location.host}/pipecat/ws?session_id=${sessionId}`;
+        const wsUrl = `${protocol}//${location.host}/pipecat/ws/${sessionId}`;
         ws = new WebSocket(wsUrl);
         ws.binaryType = 'arraybuffer';
 

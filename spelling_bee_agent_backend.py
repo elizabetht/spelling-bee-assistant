@@ -297,7 +297,7 @@ async def home():
 
 if PIPECAT_AVAILABLE:
     async def create_pipecat_pipeline_task(pipeline_metadata: "PipelineMetadata"):
-        session_id = pipeline_metadata.websocket.query_params.get("session_id")
+        session_id = pipeline_metadata.stream_id
         session_words = get_session_words(session_id) if session_id else []
         session_words_text = ", ".join(session_words) if session_words else ""
 
