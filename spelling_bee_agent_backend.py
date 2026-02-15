@@ -51,7 +51,7 @@ try:
         BotTranscriptSynchronization,
         UserTranscriptSynchronization,
     )
-    from nvidia_pipecat.services.blingfire_text_aggregator import BlingfireTextAggregator
+    from pipecat.utils.text.simple_text_aggregator import SimpleTextAggregator
     from nvidia_pipecat.services.nvidia_llm import NvidiaLLMService
     from nvidia_pipecat.transports.network.ace_fastapi_websocket import ACETransport, ACETransportParams
     from nvidia_pipecat.transports.services.ace_controller.routers.websocket_router import (
@@ -329,7 +329,6 @@ if PIPECAT_AVAILABLE:
             api_key=os.getenv("NVIDIA_API_KEY"),
             base_url=os.getenv("NVIDIA_LLM_URL", VLLM_VL_BASE),
             model=os.getenv("NVIDIA_LLM_MODEL", VLLM_VL_MODEL),
-            text_aggregator=BlingfireTextAggregator(),
         )
 
         stt = ElevenLabsRealtimeSTTService(
@@ -343,7 +342,7 @@ if PIPECAT_AVAILABLE:
             voice_id=os.getenv("RIVA_TTS_VOICE_ID", "Magpie-Multilingual.EN-US.Sofia"),
             model=os.getenv("RIVA_TTS_MODEL", "magpie_tts_ensemble-Magpie-Multilingual"),
             language=os.getenv("RIVA_TTS_LANGUAGE", "en-US"),
-            text_aggregator=BlingfireTextAggregator(),
+            text_aggregator=SimpleTextAggregator(),
         )
 
         stt_transcript_synchronization = UserTranscriptSynchronization()
