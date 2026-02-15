@@ -198,7 +198,7 @@ kubectl -n spellingbee create secret generic hf-token \
   --from-literal=token=<YOUR_HF_TOKEN>
 ```
 
-**2. Deploy everything (model + backend)**
+**2. Deploy everything (model + Redis + backend)**
 
 ```bash
 ./deploy/deploy_all.sh
@@ -208,6 +208,7 @@ Or deploy individually:
 
 ```bash
 ./deploy/deploy_model.sh      # vLLM Nemotron-Nano-12B-VL-FP8 on GPU node
+./deploy/deploy_redis.sh      # Redis session store on controller node
 ./deploy/deploy_backend.sh    # FastAPI backend on controller node
 ```
 
@@ -254,9 +255,11 @@ spelling-bee-assistant/
 ├── deploy/
 │   ├── spelling-bee-agent-backend.k8s.yaml  # K8s backend manifest
 │   ├── vllm-nemotron-nano-vl-8b.yaml        # K8s vLLM model manifest
-│   ├── deploy_all.sh               # Deploy model + backend
+│   ├── redis.k8s.yaml                     # K8s Redis manifest
+│   ├── deploy_all.sh               # Deploy model + Redis + backend
 │   ├── deploy_backend.sh           # Deploy backend only
 │   ├── deploy_model.sh             # Deploy vLLM model only
+│   ├── deploy_redis.sh             # Deploy Redis only
 │   └── smoke_test.sh               # End-to-end integration test
 ├── Dockerfile                      # Backend container image
 └── requirements.txt                # Python dependencies
