@@ -33,9 +33,9 @@ spec:
             - name: NEMO_GUARDRAILS_CONFIG_PATH
               value: "/app/guardrails"
             - name: NVIDIA_LLM_URL
-              value: "https://integrate.api.nvidia.com/v1"
+              value: "http://vllm-nemotron-nano-vl-8b:5566/v1"
             - name: NVIDIA_LLM_MODEL
-              value: "meta/llama-3.1-8b-instruct"
+              value: "nvidia/Llama-3.1-Nemotron-Nano-VL-8B-V1"
             - name: RIVA_ASR_URL
               value: "grpc.nvcf.nvidia.com:443"
             - name: RIVA_TTS_URL

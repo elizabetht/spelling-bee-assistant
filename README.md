@@ -34,7 +34,7 @@ Students upload a photo of their spelling word list, and the assistant extracts 
 │   │                    │         │  │         NeMo Guardrails      │ │     │
 │   └────────┬───────────┘         │  │                 │            │ │     │
 │            │                     │  │                 ▼            │ │     │
-│            │                     │  │          NVIDIA LLM          │ │     │
+│            │                     │  │        Nemotron-Nano         │ │     │
 │            │                     │  │       (Spelling Coach)       │ │     │
 │            │                     │  │                 │            │ │     │
 │            │                     │  │                 ▼            │ │     │
@@ -58,19 +58,19 @@ Students upload a photo of their spelling word list, and the assistant extracts 
 │                          NVIDIA AI Services                                │
 │                                                                            │
 │   ┌──────────────────┐  ┌──────────────┐  ┌────────────────────────────┐  │
-│   │  Nemotron-Nano   │  │  Riva ASR    │  │  Riva TTS                  │  │
-│   │  VL-8B (vLLM)    │  │  Parakeet    │  │  Magpie-Multilingual Sofia │  │
-│   │                  │  │  1.1B        │  │                            │  │
-│   │  Image → Words   │  │  Speech →    │  │  Text → Speech             │  │
-│   │  Definitions     │  │  Text        │  │                            │  │
-│   │  Sentences       │  │              │  │                            │  │
-│   └──────────────────┘  └──────────────┘  └────────────────────────────┘  │
+│   ┌───────────────────────────┐  ┌──────────────┐  ┌──────────────────┐  │
+│   │  Nemotron-Nano-VL-8B     │  │  Riva ASR    │  │  Riva TTS        │  │
+│   │  (vLLM, self-hosted)     │  │  Parakeet    │  │  Magpie Sofia    │  │
+│   │                          │  │  1.1B        │  │                  │  │
+│   │  Image → Words           │  │  Speech →    │  │  Text → Speech   │  │
+│   │  Definitions / Sentences │  │  Text        │  │                  │  │
+│   │  Voice Coach LLM         │  │              │  │                  │  │
+│   └───────────────────────────┘  └──────────────┘  └──────────────────┘  │
 │                                                                            │
-│   ┌──────────────────┐  ┌──────────────────────────────────────────────┐  │
-│   │  NVIDIA LLM      │  │  NeMo Guardrails                            │  │
-│   │  Llama-3.1-8B    │  │  Topic enforcement, intent filtering,       │  │
-│   │  Instruct        │  │  child-safe content policy                   │  │
-│   └──────────────────┘  └──────────────────────────────────────────────┘  │
+│   ┌──────────────────────────────────────────────────────────────────┐  │
+│   │  NeMo Guardrails                                                │  │
+│   │  Topic enforcement, intent filtering, child-safe content policy │  │
+│   └──────────────────────────────────────────────────────────────────┘  │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -82,7 +82,7 @@ Students upload a photo of their spelling word list, and the assistant extracts 
 | **Vision-Language Model** | Nemotron-Nano-VL-8B via vLLM | Extracts spelling words from uploaded images |
 | **Speech Recognition** | Riva ASR (Parakeet 1.1B) | Streaming speech-to-text with VAD |
 | **Text-to-Speech** | Riva TTS (Magpie Sofia) | Natural voice output for the spelling coach |
-| **Conversational LLM** | Llama-3.1-8B-Instruct | Powers the interactive spelling coach persona |
+| **Conversational LLM** | Nemotron-Nano-VL-8B via vLLM | Powers the interactive spelling coach (same model as VLM) |
 | **Safety** | NeMo Guardrails | Enforces spelling-only scope, filters off-topic intent |
 | **Session Store** | Redis + LangChain | Persistent word lists, progress, and chat history |
 | **Fallback OCR** | Tesseract (pytesseract) | Backup word extraction when VLM is unavailable |
@@ -146,7 +146,6 @@ Students upload a photo of their spelling word list, and the assistant extracts 
 │   External (NVIDIA Cloud):                                           │
 │     • Riva ASR  → grpc.nvcf.nvidia.com:443                          │
 │     • Riva TTS  → grpc.nvcf.nvidia.com:443                          │
-│     • LLM API   → integrate.api.nvidia.com/v1                       │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -155,9 +154,8 @@ Students upload a photo of their spelling word list, and the assistant extracts 
 - **NVIDIA Pipecat (ACE)** — Real-time voice agent pipeline framework
 - **Riva ASR** — Automatic speech recognition (Parakeet 1.1B, streaming with Silero VAD)
 - **Riva TTS** — Text-to-speech synthesis (Magpie-Multilingual Sofia EN-US)
-- **Nemotron-Nano-VL-8B** — Vision-language model for image understanding, served via vLLM
+- **Nemotron-Nano-VL-8B** — Vision-language model for image understanding and conversational coaching, served via vLLM
 - **NeMo Guardrails** — Programmable safety rails for topic enforcement and content filtering
-- **NVIDIA LLM API** — Llama-3.1-8B-Instruct for conversational coaching
 - **NVIDIA Container Runtime** — GPU-accelerated container execution
 
 ## Getting Started
@@ -227,8 +225,9 @@ spelling-bee-assistant/
 │   ├── deploy_backend.sh           # Deploy backend only
 │   ├── deploy_model.sh             # Deploy vLLM model only
 │   └── smoke_test.sh               # End-to-end integration test
-├── spelling-bee-agent-backend.k8s.yaml  # K8s backend manifest
-├── vllm-nemotron-nano-vl-8b.yaml        # K8s vLLM model manifest
+├── deployment/
+│   ├── spelling-bee-agent-backend.k8s.yaml  # K8s backend manifest
+│   └── vllm-nemotron-nano-vl-8b.yaml        # K8s vLLM model manifest
 ├── Dockerfile                      # Backend container image
 └── requirements.txt                # Python dependencies
 ```
@@ -245,5 +244,5 @@ spelling-bee-assistant/
 | `REDIS_URL` | `redis://localhost:6379/0` | Redis connection URL |
 | `VLLM_VL_BASE` | `http://vllm-nemotron-nano-vl-8b:5566/v1` | vLLM endpoint |
 | `VLLM_VL_MODEL` | `nvidia/Llama-3.1-Nemotron-Nano-VL-8B-V1` | Vision-language model |
-| `NVIDIA_LLM_URL` | `https://integrate.api.nvidia.com/v1` | NVIDIA LLM API |
-| `NVIDIA_LLM_MODEL` | `meta/llama-3.1-8b-instruct` | Conversational LLM |
+| `NVIDIA_LLM_URL` | Same as `VLLM_VL_BASE` | LLM endpoint for voice pipeline |
+| `NVIDIA_LLM_MODEL` | Same as `VLLM_VL_MODEL` | LLM model for voice pipeline |

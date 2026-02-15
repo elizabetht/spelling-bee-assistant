@@ -308,8 +308,8 @@ if PIPECAT_AVAILABLE:
 
         llm = NvidiaLLMService(
             api_key=os.getenv("NVIDIA_API_KEY"),
-            base_url=os.getenv("NVIDIA_LLM_URL", "https://integrate.api.nvidia.com/v1"),
-            model=os.getenv("NVIDIA_LLM_MODEL", "meta/llama-3.1-8b-instruct"),
+            base_url=os.getenv("NVIDIA_LLM_URL", VLLM_VL_BASE),
+            model=os.getenv("NVIDIA_LLM_MODEL", VLLM_VL_MODEL),
             text_aggregator=BlingfireTextAggregator(),
         )
 
