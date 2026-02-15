@@ -185,20 +185,20 @@ Open `http://localhost:8080` to access the test UI.
 
 ```bash
 # Deploy vLLM model + backend together
-./scripts/deploy_all.sh
+./deploy/deploy_all.sh
 
 # Or separately
-./scripts/deploy_model.sh      # vLLM vision-language model (GPU node)
-./scripts/deploy_backend.sh    # FastAPI backend (controller node)
+./deploy/deploy_model.sh      # vLLM vision-language model (GPU node)
+./deploy/deploy_backend.sh    # FastAPI backend (controller node)
 
 # With secret creation
-CREATE_SECRET=true NVIDIA_API_KEY_VALUE=<key> ./scripts/deploy_backend.sh
+CREATE_SECRET=true NVIDIA_API_KEY_VALUE=<key> ./deploy/deploy_backend.sh
 ```
 
 ## Smoke Test
 
 ```bash
-./scripts/smoke_test.sh http://localhost:8080 ./path/to/words-image.png
+./deploy/smoke_test.sh http://localhost:8080 ./path/to/words-image.png
 ```
 
 ## API
@@ -220,14 +220,13 @@ spelling-bee-assistant/
 ├── guardrails/
 │   ├── config.yml                  # NeMo Guardrails model config
 │   └── rails.co                    # Intent policies (spelling scope)
-├── scripts/
+├── deploy/
+│   ├── spelling-bee-agent-backend.k8s.yaml  # K8s backend manifest
+│   ├── vllm-nemotron-nano-vl-8b.yaml        # K8s vLLM model manifest
 │   ├── deploy_all.sh               # Deploy model + backend
 │   ├── deploy_backend.sh           # Deploy backend only
 │   ├── deploy_model.sh             # Deploy vLLM model only
 │   └── smoke_test.sh               # End-to-end integration test
-├── deployment/
-│   ├── spelling-bee-agent-backend.k8s.yaml  # K8s backend manifest
-│   └── vllm-nemotron-nano-vl-8b.yaml        # K8s vLLM model manifest
 ├── Dockerfile                      # Backend container image
 └── requirements.txt                # Python dependencies
 ```

@@ -3,7 +3,7 @@ set -euo pipefail
 
 KUBECTL_BIN="${KUBECTL_BIN:-kubectl}"
 NAMESPACE="${NAMESPACE:-spellingbee}"
-MANIFEST="${MANIFEST:-deployment/vllm-nemotron-nano-vl-8b.yaml}"
+MANIFEST="${MANIFEST:-deploy/vllm-nemotron-nano-vl-8b.yaml}"
 DEPLOYMENT="${DEPLOYMENT:-vllm-nemotron-nano-vl-8b}"
 CHECK_HF_SECRET="${CHECK_HF_SECRET:-true}"
 
