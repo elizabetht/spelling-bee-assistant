@@ -45,7 +45,10 @@ try:
     from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
 
     from nvidia_pipecat.pipeline.ace_pipeline_runner import ACEPipelineRunner, PipelineMetadata
-    from nvidia_pipecat.processors.nvidia_context_aggregator import create_nvidia_context_aggregator
+    from nvidia_pipecat.processors.nvidia_context_aggregator import (
+        NvidiaTTSResponseCacher,
+        create_nvidia_context_aggregator,
+    )
     from nvidia_pipecat.processors.transcript_synchronization import (
         BotTranscriptSynchronization,
         UserTranscriptSynchronization,
@@ -299,7 +302,8 @@ if PIPECAT_AVAILABLE:
     async def create_pipecat_pipeline_task(pipeline_metadata: "PipelineMetadata"):
         session_id = pipeline_metadata.stream_id
         session_words = get_session_words(session_id) if session_id else []
-        session_words_text = ", ".join(session_words) if session_words else ""
+        word_count = len(session_words)
+        first_word = session_words[0] if session_words else None
 
         transport = ACETransport(
             websocket=pipeline_metadata.websocket,
@@ -340,23 +344,33 @@ if PIPECAT_AVAILABLE:
             {
                 "role": "system",
                 "content": (
-                    "You are a child-friendly spelling bee coach. "
-                    "Only discuss spelling practice. "
-                    "Allowed intents are: repeat the current word, use it in a sentence, "
-                    "give a short definition, skip, and encourage the child. "
-                    "If user asks off-topic questions, gently redirect them to spelling practice. "
-                    "Keep answers short and friendly. "
-                    "Run a spelling quiz one word at a time and wait for the child to spell each word. "
-                    "If there is no uploaded session word list, ask the user to upload an image first. "
-                    f"Session ID: {session_id or 'none'}. "
-                    f"Session word list: {session_words_text if session_words_text else 'none uploaded yet'}. "
-                    f"NeMo guardrails policy: {NEMO_POLICY_TEXT if NEMO_POLICY_TEXT else 'spelling-only mode'}"
+                    "You are a friendly spelling bee coach for children.\n\n"
+                    "RULES — follow these strictly:\n"
+                    "1. Present ONLY ONE word at a time. Say the word clearly, then STOP and WAIT for the child to spell it.\n"
+                    "2. NEVER list, read out, or mention multiple words. Only reveal the current word being quizzed.\n"
+                    "3. After the child spells it, say 'correct' or 'incorrect' with brief encouragement, then move to the NEXT word.\n"
+                    "4. If the child asks you to repeat, repeat ONLY the current word.\n"
+                    "5. If the child asks for a sentence or definition, give a short one for the CURRENT word only.\n"
+                    "6. If the child says 'skip', move to the next word without revealing the spelling.\n"
+                    "7. Keep every response to one or two SHORT sentences. Do NOT give long explanations.\n"
+                    "8. Only discuss spelling practice. Gently redirect off-topic questions.\n"
+                    "9. When all words are done, congratulate the child and say how many they got right.\n"
+                    "10. NEVER read, recite, or enumerate the word list. Only say the current quiz word.\n\n"
+                    f"Total words: {word_count}.\n"
+                    + (
+                        "HIDDEN WORD LIST (use for quizzing order — NEVER read this list aloud):\n"
+                        + "\n".join(f"  Word {i+1}: {w}" for i, w in enumerate(session_words))
+                        + "\n"
+                        if session_words else "No words uploaded yet.\n"
+                    )
+                    + f"{NEMO_POLICY_TEXT if NEMO_POLICY_TEXT else ''}"
                 ),
             }
         ]
 
         context = OpenAILLMContext(messages)
         context_aggregator = create_nvidia_context_aggregator(context, send_interims=True)
+        tts_response_cacher = NvidiaTTSResponseCacher()
 
         pipeline = Pipeline(
             [
@@ -366,6 +380,7 @@ if PIPECAT_AVAILABLE:
                 context_aggregator.user(),
                 llm,
                 tts,
+                tts_response_cacher,
                 tts_transcript_synchronization,
                 transport.output(),
                 context_aggregator.assistant(),
@@ -391,8 +406,10 @@ if PIPECAT_AVAILABLE:
                     {
                         "role": "system",
                         "content": (
-                            "Introduce yourself as a spelling coach, confirm the uploaded list is ready, "
-                            "and start with the first word."
+                            f"Greet the child, say you have {word_count} words ready, "
+                            f"then say: 'Your first word is: {first_word}.' "
+                            "Then STOP and wait for the child to spell it. "
+                            "Do NOT say any other words from the list."
                         ),
                     }
                 )
@@ -401,8 +418,8 @@ if PIPECAT_AVAILABLE:
                     {
                         "role": "system",
                         "content": (
-                            "Introduce yourself as a spelling coach and ask the user to upload an image "
-                            "of words, then reconnect with session_id to begin."
+                            "Greet the child and tell them to upload a picture of their spelling words "
+                            "first, then reconnect to start practice."
                         ),
                     }
                 )
