@@ -75,11 +75,15 @@ flowchart TB
 
 ## Run
 
+Python requirement: `3.12+` (required by NVIDIA Pipecat).
+
 Install dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
+
+Note: Pipecat is installed from NVIDIA source (`voice-agent-examples`) in `requirements.txt`.
 
 Start backend:
 

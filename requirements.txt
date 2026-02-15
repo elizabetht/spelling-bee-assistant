@@ -4,7 +4,8 @@ uvicorn
 python-dotenv
 
 # Speech and agent pipeline
-nvidia-pipecat
+# nvidia-pipecat requires Python >=3.12 and is installed from source
+git+https://github.com/NVIDIA/voice-agent-examples.git
 nvidia-riva-client
 
 # Vision-language model / OCR (example: pytesseract, Pillow)
