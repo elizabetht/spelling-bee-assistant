@@ -1,0 +1,8 @@
+define flow spellingbee_scope
+  user ...
+  if not user intent in [spelling_word, spelling_help, repeat_word, use_in_sentence, give_definition, skip_word, encouragement]
+    bot say "Let’s get back to spelling practice. Say repeat, sentence, definition, or spell the word."
+
+
+define flow spellingbee_safe_reply
+  bot ...

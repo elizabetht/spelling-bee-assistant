@@ -10,18 +10,55 @@ Spelling Bee Voice Agent Backend
 """
 
 import os
+import base64
+import json
+import re
+from pathlib import Path
+from urllib import request, error
 from typing import List, Optional
-from fastapi import FastAPI, UploadFile, File, WebSocket, WebSocketDisconnect, Request
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from PIL import Image
 import pytesseract
 import redis
-from langchain.memory import RedisChatMessageHistory
-from langchain.memory import ConversationBufferMemory
-from langchain.schema import messages_from_dict, messages_to_dict
+import uvicorn
+
+try:
+    from langchain_community.chat_message_histories import RedisChatMessageHistory
+except ImportError:
+    RedisChatMessageHistory = None
+
+try:
+    from nemoguardrails import LLMRails, RailsConfig
+except ImportError:
+    LLMRails = None
+    RailsConfig = None
+
+try:
+    from pipecat.audio.vad.silero import SileroVADAnalyzer
+    from pipecat.frames.frames import LLMMessagesFrame
+    from pipecat.pipeline.pipeline import Pipeline
+    from pipecat.pipeline.task import PipelineParams, PipelineTask
+    from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
+
+    from nvidia_pipecat.pipeline.ace_pipeline_runner import ACEPipelineRunner, PipelineMetadata
+    from nvidia_pipecat.processors.nvidia_context_aggregator import create_nvidia_context_aggregator
+    from nvidia_pipecat.processors.transcript_synchronization import (
+        BotTranscriptSynchronization,
+        UserTranscriptSynchronization,
+    )
+    from nvidia_pipecat.services.blingfire_text_aggregator import BlingfireTextAggregator
+    from nvidia_pipecat.services.nvidia_llm import NvidiaLLMService
+    from nvidia_pipecat.services.riva_speech import RivaASRService, RivaTTSService
+    from nvidia_pipecat.transports.network.ace_fastapi_websocket import ACETransport, ACETransportParams
+    from nvidia_pipecat.transports.services.ace_controller.routers.websocket_router import (
+        router as websocket_router,
+    )
+
+    PIPECAT_AVAILABLE = True
+except ImportError:
+    PIPECAT_AVAILABLE = False
 
 # Placeholder for NeMo Guardrails integration
 # from nemoguardrails import Rails
@@ -37,10 +74,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve static files (for web UI)
-if os.path.exists("static"):
-    app.mount("/static", StaticFiles(directory="static"), name="static")
-
 # Redis setup for Langchain memory
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 redis_client = redis.Redis.from_url(REDIS_URL)
@@ -49,96 +82,318 @@ redis_client = redis.Redis.from_url(REDIS_URL)
 session_wordlists = {}  # session_id: [words]
 session_progress = {}   # session_id: {current, incorrect, skipped}
 
+VLLM_VL_BASE = os.getenv("VLLM_VL_BASE", "http://vllm-nemotron-nano-vl-8b:5566/v1")
+VLLM_VL_MODEL = os.getenv("VLLM_VL_MODEL", "nvidia/Llama-3.1-Nemotron-Nano-VL-8B-V1")
+NEMO_GUARDRAILS_CONFIG_PATH = os.getenv("NEMO_GUARDRAILS_CONFIG_PATH", "./guardrails")
+ENABLE_NEMO_GUARDRAILS = os.getenv("ENABLE_NEMO_GUARDRAILS", "true").lower() == "true"
+
+ACE_RUNNER = None
+NEMO_RAILS = None
+NEMO_POLICY_TEXT = ""
+
+
+class _NoOpMemory:
+    def save_context(self, _input, _output):
+        return None
+
+
+def get_session_words(session_id: str) -> List[str]:
+    if session_id in session_wordlists:
+        return session_wordlists[session_id]
+
+    raw = redis_client.get(f"spellingbee:session:{session_id}:words")
+    if not raw:
+        return []
+    try:
+        decoded = json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
+        return decoded if isinstance(decoded, list) else []
+    except json.JSONDecodeError:
+        return []
+
+
+def set_session_words(session_id: str, words: List[str]) -> None:
+    session_wordlists[session_id] = words
+    redis_client.set(f"spellingbee:session:{session_id}:words", json.dumps(words), ex=60 * 60 * 24)
+
+
+def _load_guardrails_policy_text() -> str:
+    rails_file = Path(NEMO_GUARDRAILS_CONFIG_PATH) / "rails.co"
+    if rails_file.exists():
+        return rails_file.read_text(encoding="utf-8").strip()
+    return ""
+
+
+def initialize_nemo_guardrails() -> None:
+    global NEMO_RAILS, NEMO_POLICY_TEXT
+    NEMO_POLICY_TEXT = _load_guardrails_policy_text()
+
+    if not ENABLE_NEMO_GUARDRAILS or not LLMRails or not RailsConfig:
+        return
+
+    config_path = Path(NEMO_GUARDRAILS_CONFIG_PATH)
+    if not config_path.exists():
+        return
+
+    try:
+        rails_config = RailsConfig.from_path(str(config_path))
+        NEMO_RAILS = LLMRails(rails_config)
+    except Exception:
+        NEMO_RAILS = None
+
+
+def _post_vllm_chat(messages: list[dict], max_tokens: int = 256, temperature: float = 0.2) -> str:
+    payload = {
+        "model": VLLM_VL_MODEL,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+    body = json.dumps(payload).encode("utf-8")
+    req = request.Request(
+        f"{VLLM_VL_BASE}/chat/completions",
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with request.urlopen(req, timeout=45) as response:
+        raw = response.read().decode("utf-8")
+    parsed = json.loads(raw)
+    return parsed["choices"][0]["message"]["content"].strip()
+
+
+def _parse_word_list(text: str) -> List[str]:
+    cleaned = []
+    for line in text.splitlines():
+        token = re.sub(r"[^A-Za-z-]", "", line.strip())
+        if token:
+            cleaned.append(token)
+    return cleaned
+
 # --- OCR/vision-language model for extracting words from image ---
 def extract_words_from_image(image_bytes) -> List[str]:
+    image_bytes.seek(0)
+    raw = image_bytes.read()
+    if not raw:
+        return []
+
+    image_b64 = base64.b64encode(raw).decode("utf-8")
+    vl_messages = [
+        {
+            "role": "system",
+            "content": (
+                "Extract only spelling words from the image. "
+                "Return plain text with one single word per line and no numbering."
+            ),
+        },
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Read this image and return only the spelling words."},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{image_b64}"},
+                },
+            ],
+        },
+    ]
+
+    try:
+        vl_text = _post_vllm_chat(vl_messages, max_tokens=600, temperature=0.0)
+        words = _parse_word_list(vl_text)
+        if words:
+            return words
+    except (error.URLError, error.HTTPError, KeyError, IndexError, TimeoutError, json.JSONDecodeError):
+        pass
+
+    image_bytes.seek(0)
     image = Image.open(image_bytes)
-    text = pytesseract.image_to_string(image)
-    # Simple split: one word per line, filter out non-alpha
-    words = [w.strip() for w in text.splitlines() if w.strip().isalpha()]
-    return words
+    ocr_text = pytesseract.image_to_string(image)
+    return [w.strip() for w in ocr_text.splitlines() if w.strip().isalpha()]
+
+
+def generate_sentence_for_word(word: str) -> str:
+    messages = [
+        {
+            "role": "system",
+            "content": "You are helping a child with spelling bee practice.",
+        },
+        {
+            "role": "user",
+            "content": (
+                f"Use the word '{word}' in one short child-friendly sentence. "
+                "Return only the sentence."
+            ),
+        },
+    ]
+    try:
+        return _post_vllm_chat(messages, max_tokens=80, temperature=0.3)
+    except (error.URLError, error.HTTPError, KeyError, IndexError, TimeoutError, json.JSONDecodeError):
+        return f"Example: I can spell the word {word} today."
+
+
+def generate_definition_for_word(word: str) -> str:
+    messages = [
+        {
+            "role": "system",
+            "content": "You are helping a child with spelling bee practice.",
+        },
+        {
+            "role": "user",
+            "content": (
+                f"Give a short child-friendly definition for the word '{word}'. "
+                "Return one concise sentence."
+            ),
+        },
+    ]
+    try:
+        return _post_vllm_chat(messages, max_tokens=100, temperature=0.2)
+    except (error.URLError, error.HTTPError, KeyError, IndexError, TimeoutError, json.JSONDecodeError):
+        return f"{word} is a spelling bee practice word."
+
 
 @app.post("/upload-image")
 async def upload_image(file: UploadFile = File(...)):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Image file is required.")
+
     session_id = os.urandom(8).hex()
     words = extract_words_from_image(file.file)
-    session_wordlists[session_id] = words
+
+    if not words:
+        raise HTTPException(status_code=422, detail="No spelling words detected in image.")
+
+    set_session_words(session_id, words)
     session_progress[session_id] = {"current": 0, "incorrect": [], "skipped": []}
-    return {"session_id": session_id, "words": words}
 
-# --- WebSocket for quiz interaction ---
-@app.websocket("/ws/quiz/{session_id}")
-async def quiz_ws(websocket: WebSocket, session_id: str):
-    await websocket.accept()
-    words = session_wordlists.get(session_id, [])
-    progress = session_progress.get(session_id, {"current": 0, "incorrect": [], "skipped": []})
-    # Langchain memory setup
-    chat_history = RedisChatMessageHistory(session_id, url=REDIS_URL)
-    memory = ConversationBufferMemory(chat_memory=chat_history)
-    try:
-        await websocket.send_text("Welcome to the Spelling Bee! Say 'start' to begin.")
-        while True:
-            data = await websocket.receive_text()
-            # --- NeMo Guardrails check would go here ---
-            # if not rails.is_allowed(data):
-            #     await websocket.send_text("Let's focus on spelling bee practice!")
-            #     continue
-            if data.lower() == "start":
-                idx = progress["current"]
-                if idx < len(words):
-                    await websocket.send_text(f"Spell the word: {words[idx]}")
-                else:
-                    await websocket.send_text("No more words. Well done!")
-                    break
-            elif data.lower() == "repeat":
-                idx = progress["current"]
-                await websocket.send_text(f"Repeat: {words[idx]}")
-            elif data.lower() == "skip":
-                idx = progress["current"]
-                progress["skipped"].append(words[idx])
-                progress["current"] += 1
-                await websocket.send_text("Word skipped. Say 'start' for next word.")
-            elif data.lower() == "sentence":
-                idx = progress["current"]
-                # Placeholder: call VL model for sentence
-                sentence = f"Example: I can spell the word {words[idx]} easily."
-                await websocket.send_text(sentence)
-            elif data.lower() == "definition":
-                idx = progress["current"]
-                # Placeholder: call VL model for definition
-                definition = f"Definition of {words[idx]}: (definition here)"
-                await websocket.send_text(definition)
-            elif data.lower().startswith("spell "):
-                guess = data[6:].strip().lower()
-                idx = progress["current"]
-                correct = words[idx].lower()
-                if guess == correct:
-                    await websocket.send_text("Correct! Great job! Say 'start' for next word.")
-                    progress["current"] += 1
-                else:
-                    await websocket.send_text("That's not quite right. Try again or say 'skip'.")
-                    progress["incorrect"].append(guess)
-            elif data.lower() == "review":
-                incorrect = progress["incorrect"]
-                await websocket.send_text(f"Incorrect words so far: {incorrect}")
-            elif data.lower() == "resume":
-                idx = progress["current"]
-                await websocket.send_text(f"Resuming at word: {words[idx]}")
+    return {
+        "session_id": session_id,
+        "word_count": len(words),
+        "sample": words[:10],
+        "next": "Connect websocket at /pipecat/ws?session_id=<session_id>",
+    }
+
+
+if PIPECAT_AVAILABLE:
+    async def create_pipecat_pipeline_task(pipeline_metadata: "PipelineMetadata"):
+        session_id = pipeline_metadata.websocket.query_params.get("session_id")
+        session_words = get_session_words(session_id) if session_id else []
+        session_words_text = ", ".join(session_words) if session_words else ""
+
+        transport = ACETransport(
+            websocket=pipeline_metadata.websocket,
+            params=ACETransportParams(
+                vad_analyzer=SileroVADAnalyzer(),
+                audio_out_10ms_chunks=20,
+            ),
+        )
+
+        llm = NvidiaLLMService(
+            api_key=os.getenv("NVIDIA_API_KEY"),
+            base_url=os.getenv("NVIDIA_LLM_URL", "https://integrate.api.nvidia.com/v1"),
+            model=os.getenv("NVIDIA_LLM_MODEL", "meta/llama-3.1-8b-instruct"),
+            text_aggregator=BlingfireTextAggregator(),
+        )
+
+        stt = RivaASRService(
+            server=os.getenv("RIVA_ASR_URL", "grpc.nvcf.nvidia.com:443"),
+            api_key=os.getenv("NVIDIA_API_KEY"),
+            language=os.getenv("RIVA_ASR_LANGUAGE", "en-US"),
+            sample_rate=16000,
+            model=os.getenv("RIVA_ASR_MODEL", "parakeet-1.1b-en-US-asr-streaming-silero-vad-sortformer"),
+        )
+
+        tts = RivaTTSService(
+            server=os.getenv("RIVA_TTS_URL", "grpc.nvcf.nvidia.com:443"),
+            api_key=os.getenv("NVIDIA_API_KEY"),
+            voice_id=os.getenv("RIVA_TTS_VOICE_ID", "Magpie-Multilingual.EN-US.Sofia"),
+            model=os.getenv("RIVA_TTS_MODEL", "magpie_tts_ensemble-Magpie-Multilingual"),
+            language=os.getenv("RIVA_TTS_LANGUAGE", "en-US"),
+            text_aggregator=BlingfireTextAggregator(),
+        )
+
+        stt_transcript_synchronization = UserTranscriptSynchronization()
+        tts_transcript_synchronization = BotTranscriptSynchronization()
+
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a child-friendly spelling bee coach. "
+                    "Only discuss spelling practice. "
+                    "Allowed intents are: repeat the current word, use it in a sentence, "
+                    "give a short definition, skip, and encourage the child. "
+                    "If user asks off-topic questions, gently redirect them to spelling practice. "
+                    "Keep answers short and friendly. "
+                    "Run a spelling quiz one word at a time and wait for the child to spell each word. "
+                    "If there is no uploaded session word list, ask the user to upload an image first. "
+                    f"Session ID: {session_id or 'none'}. "
+                    f"Session word list: {session_words_text if session_words_text else 'none uploaded yet'}. "
+                    f"NeMo guardrails policy: {NEMO_POLICY_TEXT if NEMO_POLICY_TEXT else 'spelling-only mode'}"
+                ),
+            }
+        ]
+
+        context = OpenAILLMContext(messages)
+        context_aggregator = create_nvidia_context_aggregator(context, send_interims=True)
+
+        pipeline = Pipeline(
+            [
+                transport.input(),
+                stt,
+                stt_transcript_synchronization,
+                context_aggregator.user(),
+                llm,
+                tts,
+                tts_transcript_synchronization,
+                transport.output(),
+                context_aggregator.assistant(),
+            ]
+        )
+
+        task = PipelineTask(
+            pipeline,
+            params=PipelineParams(
+                allow_interruptions=True,
+                enable_metrics=True,
+                enable_usage_metrics=True,
+                send_initial_empty_metrics=True,
+                start_metadata={"stream_id": pipeline_metadata.stream_id},
+            ),
+        )
+
+        @transport.event_handler("on_client_connected")
+        async def on_client_connected(transport, client):
+            del transport, client
+            if session_words:
+                messages.append(
+                    {
+                        "role": "system",
+                        "content": (
+                            "Introduce yourself as a spelling coach, confirm the uploaded list is ready, "
+                            "and start with the first word."
+                        ),
+                    }
+                )
             else:
-                await websocket.send_text("Allowed commands: start, repeat, skip, sentence, definition, review, resume, spell <word>")
-            # Save progress
-            session_progress[session_id] = progress
-    except WebSocketDisconnect:
-        pass
+                messages.append(
+                    {
+                        "role": "system",
+                        "content": (
+                            "Introduce yourself as a spelling coach and ask the user to upload an image "
+                            "of words, then reconnect with session_id to begin."
+                        ),
+                    }
+                )
+            await task.queue_frames([LLMMessagesFrame(messages)])
 
-# --- Static HTML for quick test (replace with real UI) ---
-@app.get("/")
-async def root():
-    return HTMLResponse("""
-    <html><body>
-    <h2>Spelling Bee Assistant</h2>
-    <form action='/upload-image' enctype='multipart/form-data' method='post'>
-      <input name='file' type='file'/><input type='submit'/>
-    </form>
-    <p>After uploading, connect to <code>/ws/quiz/&lt;session_id&gt;</code> via WebSocket.</p>
-    </body></html>
-    """)
+        return task
+
+
+if PIPECAT_AVAILABLE:
+    initialize_nemo_guardrails()
+    app.include_router(websocket_router, prefix="/pipecat")
+    ACE_RUNNER = ACEPipelineRunner.create_instance(pipeline_callback=create_pipecat_pipeline_task)
+
+
+if __name__ == "__main__":
+    uvicorn.run("spelling_bee_agent_backend:app", host="0.0.0.0", port=8080, reload=False)

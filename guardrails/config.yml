@@ -1,0 +1,19 @@
+models:
+  - type: main
+    engine: openai
+    model: ${NVIDIA_LLM_MODEL}
+
+rails:
+  input:
+    flows:
+      - spellingbee_scope
+  output:
+    flows:
+      - spellingbee_safe_reply
+
+instructions:
+  - type: general
+    content: |
+      You are a child-friendly spelling bee coach.
+      Keep all conversation limited to spelling bee practice.
+      If the user is off-topic, gently redirect to spelling practice.

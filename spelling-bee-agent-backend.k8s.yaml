@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spelling-bee-agent-backend
+  namespace: spellingbee
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spelling-bee-agent-backend
+  template:
+    metadata:
+      labels:
+        app: spelling-bee-agent-backend
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: controller
+      containers:
+        - name: backend
+          image: localhost:32000/spelling-bee-agent-backend:0.1
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: REDIS_URL
+              value: "redis://redis:6379/0"
+            - name: VLLM_VL_BASE
+              value: "http://vllm-nemotron-nano-vl-8b:5566/v1"
+            - name: VLLM_VL_MODEL
+              value: "nvidia/Llama-3.1-Nemotron-Nano-VL-8B-V1"
+            - name: ENABLE_NEMO_GUARDRAILS
+              value: "true"
+            - name: NEMO_GUARDRAILS_CONFIG_PATH
+              value: "/app/guardrails"
+            - name: NVIDIA_LLM_URL
+              value: "https://integrate.api.nvidia.com/v1"
+            - name: NVIDIA_LLM_MODEL
+              value: "meta/llama-3.1-8b-instruct"
+            - name: RIVA_ASR_URL
+              value: "grpc.nvcf.nvidia.com:443"
+            - name: RIVA_TTS_URL
+              value: "grpc.nvcf.nvidia.com:443"
+            - name: NVIDIA_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nvidia-api-key
+                  key: api-key
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spelling-bee-agent-backend
+  namespace: spellingbee
+spec:
+  type: NodePort
+  selector:
+    app: spelling-bee-agent-backend
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      nodePort: 30088
