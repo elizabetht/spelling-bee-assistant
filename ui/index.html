@@ -395,7 +395,7 @@ registerProcessor('capture-processor', CaptureProcessor);
         }
 
         sessionId = data.session_id;
-        const wordCount = data.words ? data.words.length : 0;
+        const wordCount = data.word_count || 0;
 
         uploadStatus.className = 'upload-status ok';
         uploadStatus.textContent = `${wordCount} word${wordCount !== 1 ? 's' : ''} loaded`;
