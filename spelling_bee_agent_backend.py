@@ -58,7 +58,7 @@ try:
 
     # Cloud-hosted ASR (ElevenLabs Scribe) + TTS (Magpie via NVIDIA Cloud)
     from pipecat.services.elevenlabs.stt import ElevenLabsRealtimeSTTService
-    from pipecat.services.nvidia import NvidiaTTSService
+    from pipecat.services.nvidia.tts import NvidiaTTSService
 
     PIPECAT_AVAILABLE = True
 except ImportError:
