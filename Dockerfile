@@ -13,6 +13,16 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
+# Patch nvidia-pipecat for pipecat >=0.0.100 compatibility
+# (FrameSerializerType was removed; ACE serializer is always binary)
+RUN NVPC=$(python -c "import nvidia_pipecat; import os; print(os.path.dirname(nvidia_pipecat.__file__))") && \
+    sed -i 's/from pipecat.serializers.base_serializer import FrameSerializer, FrameSerializerType/from pipecat.serializers.base_serializer import FrameSerializer/' \
+        "$NVPC/transports/network/ace_fastapi_websocket.py" && \
+    sed -i 's/is_binary = self._params.serializer.type == FrameSerializerType.BINARY/is_binary = True/' \
+        "$NVPC/transports/network/ace_fastapi_websocket.py" && \
+    sed -i '/FrameSerializerType/d' "$NVPC/serializers/ace_websocket.py" && \
+    sed -i '/def type/,/return/{s/return .*/return True/}' "$NVPC/serializers/ace_websocket.py"
+
 COPY spelling_bee_agent_backend.py ./
 COPY guardrails ./guardrails
 COPY ui ./ui

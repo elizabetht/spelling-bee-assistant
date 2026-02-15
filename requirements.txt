@@ -7,6 +7,7 @@ python-multipart
 # Speech and agent pipeline
 # nvidia-pipecat requires Python >=3.12 and is installed from source
 git+https://github.com/NVIDIA/voice-agent-examples.git
+pipecat-ai[elevenlabs]>=0.0.100
 elevenlabs
 
 # Vision-language model / OCR (example: pytesseract, Pillow)

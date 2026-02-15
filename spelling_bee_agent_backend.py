@@ -59,7 +59,7 @@ try:
     )
 
     # Cloud-hosted ASR (ElevenLabs Scribe) + TTS (Riva Magpie via NVIDIA Cloud)
-    from pipecat.services.elevenlabs import ElevenLabsSTTService
+    from pipecat.services.elevenlabs.stt import ElevenLabsRealtimeSTTService
     from nvidia_pipecat.services.riva_speech import RivaTTSService
 
     PIPECAT_AVAILABLE = True
@@ -332,10 +332,8 @@ if PIPECAT_AVAILABLE:
             text_aggregator=BlingfireTextAggregator(),
         )
 
-        stt = ElevenLabsSTTService(
+        stt = ElevenLabsRealtimeSTTService(
             api_key=os.getenv("ELEVENLABS_API_KEY"),
-            model="scribe_v1",
-            language="en",
             sample_rate=16000,
         )
 
