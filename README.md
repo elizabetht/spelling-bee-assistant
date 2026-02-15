@@ -257,10 +257,6 @@ spelling-bee-assistant/
 ├── guardrails/
 │   ├── config.yml                  # NeMo Guardrails model config
 │   └── rails.co                    # Intent policies (spelling scope)
-├── services/                           # (unused — retained for local ASR/TTS fallback)
-│   ├── nvidia_websocket_stt.py         # Nemotron Speech ASR Pipecat adapter
-│   ├── magpie_websocket_tts.py         # Magpie TTS Pipecat adapter
-│   └── frames.py                       # Custom pipeline frame types
 ├── deploy/
 │   ├── spelling-bee-agent-backend.k8s.yaml  # K8s backend manifest
 │   ├── vllm-nemotron-nano-vl-8b.yaml        # K8s vLLM model manifest
