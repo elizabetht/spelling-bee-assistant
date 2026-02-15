@@ -50,16 +50,15 @@ try:
         BotTranscriptSynchronization,
         UserTranscriptSynchronization,
     )
-    from pipecat.utils.text.simple_text_aggregator import SimpleTextAggregator
     from nvidia_pipecat.services.nvidia_llm import NvidiaLLMService
     from nvidia_pipecat.transports.network.ace_fastapi_websocket import ACETransport, ACETransportParams
     from nvidia_pipecat.transports.services.ace_controller.routers.websocket_router import (
         router as websocket_router,
     )
 
-    # Cloud-hosted ASR (ElevenLabs Scribe) + TTS (Riva Magpie via NVIDIA Cloud)
+    # Cloud-hosted ASR (ElevenLabs Scribe) + TTS (Magpie via NVIDIA Cloud)
     from pipecat.services.elevenlabs.stt import ElevenLabsRealtimeSTTService
-    from nvidia_pipecat.services.riva_speech import RivaTTSService
+    from pipecat.services.nvidia import NvidiaTTSService
 
     PIPECAT_AVAILABLE = True
 except ImportError:
@@ -326,13 +325,9 @@ if PIPECAT_AVAILABLE:
             sample_rate=16000,
         )
 
-        tts = RivaTTSService(
-            server=os.getenv("RIVA_TTS_URL", "grpc.nvcf.nvidia.com:443"),
+        tts = NvidiaTTSService(
             api_key=os.getenv("NVIDIA_API_KEY"),
-            voice_id=os.getenv("RIVA_TTS_VOICE_ID", "Magpie-Multilingual.EN-US.Sofia"),
-            model=os.getenv("RIVA_TTS_MODEL", "magpie_tts_ensemble-Magpie-Multilingual"),
-            language=os.getenv("RIVA_TTS_LANGUAGE", "en-US"),
-            text_aggregator=SimpleTextAggregator(),
+            voice_id=os.getenv("RIVA_TTS_VOICE_ID", "Magpie-Multilingual.EN-US.Aria"),
         )
 
         stt_transcript_synchronization = UserTranscriptSynchronization()
