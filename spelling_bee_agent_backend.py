@@ -364,6 +364,7 @@ if PIPECAT_AVAILABLE:
             api_key=os.getenv("ELEVENLABS_API_KEY"),
             voice_id=os.getenv("ELEVENLABS_TTS_VOICE_ID", "9BWtsMINqrJLrRacOk9x"),
             model="eleven_turbo_v2_5",
+            sample_rate=16000,
         )
 
         stt_transcript_synchronization = UserTranscriptSynchronization()
@@ -425,6 +426,8 @@ if PIPECAT_AVAILABLE:
                 enable_metrics=True,
                 enable_usage_metrics=True,
                 send_initial_empty_metrics=True,
+                audio_in_sample_rate=16000,
+                audio_out_sample_rate=16000,
                 start_metadata={"stream_id": pipeline_metadata.stream_id},
             ),
         )
