@@ -11,7 +11,8 @@ RUN apt-get update \
 
 COPY requirements.txt ./
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+    && pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir --force-reinstall --no-deps "pipecat-ai[elevenlabs]>=0.0.100"
 
 # Patch nvidia-pipecat for pipecat >=0.0.100 compatibility
 # (FrameSerializerType was removed; ACE serializer is always binary)
