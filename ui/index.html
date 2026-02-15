@@ -617,6 +617,14 @@ registerProcessor('capture-processor', CaptureProcessor);
       startBtn.textContent = 'Connecting...';
 
       try {
+        // Create playback AudioContext IMMEDIATELY inside click handler
+        // (before any await) so browser allows it as a user gesture.
+        playbackCtx = new AudioContext();
+        // Explicitly resume in case the browser still marks it suspended.
+        await playbackCtx.resume();
+        nextPlayTime = 0;
+        console.log('[Audio] Playback context created, state:', playbackCtx.state, 'sampleRate:', playbackCtx.sampleRate);
+
         // Request mic access
         micStream = await navigator.mediaDevices.getUserMedia({
           audio: {
@@ -652,10 +660,6 @@ registerProcessor('capture-processor', CaptureProcessor);
         const source = audioCtx.createMediaStreamSource(micStream);
         source.connect(workletNode);
         // Don't connect worklet to destination (no feedback)
-
-        // Set up playback context  (22kHz = Magpie TTS output rate)
-        playbackCtx = new AudioContext({ sampleRate: 22000 });
-        nextPlayTime = 0;
 
         // Reset score
         scoreCorrect = 0;
@@ -999,7 +1003,15 @@ registerProcessor('capture-processor', CaptureProcessor);
 
     // ===================== Audio Playback =====================
     function playAudioChunk(pcmBytes, sampleRate) {
-      if (!playbackCtx) return;
+      if (!playbackCtx) {
+        console.warn('[Audio] No playback context, dropping audio chunk');
+        return;
+      }
+
+      // Ensure context is running (may have been suspended by browser policy)
+      if (playbackCtx.state === 'suspended') {
+        playbackCtx.resume().then(() => console.log('[Audio] Playback context resumed'));
+      }
 
       let data = pcmBytes;
       // Strip WAV header if present (44-byte RIFF header starts with 'RIFF')
@@ -1026,7 +1038,7 @@ registerProcessor('capture-processor', CaptureProcessor);
 
       const now = playbackCtx.currentTime;
       if (nextPlayTime < now) {
-        nextPlayTime = now;
+        nextPlayTime = now + 0.01; // tiny offset to avoid scheduling in the past
       }
       source.start(nextPlayTime);
       nextPlayTime += audioBuffer.duration;
