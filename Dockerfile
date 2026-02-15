@@ -10,9 +10,10 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir --force-reinstall --no-deps "pipecat-ai[elevenlabs]>=0.0.100"
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip \
+    && pip install -r requirements.txt \
+    && pip install --force-reinstall --no-deps "pipecat-ai[elevenlabs]>=0.0.100"
 
 # Patch nvidia-pipecat for pipecat >=0.0.100 compatibility
 COPY patch_nvidia_pipecat.py ./
