@@ -40,7 +40,7 @@ except ImportError:
 try:
     from pipecat.audio.vad.silero import SileroVADAnalyzer
     from pipecat.audio.vad.vad_analyzer import VADParams
-    from pipecat.frames.frames import Frame, LLMMessagesFrame, OutputTransportMessageFrame, TextFrame, TTSAudioRawFrame
+    from pipecat.frames.frames import Frame, LLMMessagesFrame, OutputAudioRawFrame, OutputTransportMessageFrame, TextFrame
     from pipecat.pipeline.pipeline import Pipeline
     from pipecat.pipeline.task import PipelineParams, PipelineTask
     from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
@@ -157,7 +157,7 @@ if PIPECAT_AVAILABLE:
                         # Push audio in ~200ms chunks to avoid blocking
                         chunk_size = self._sample_rate * 2 * 200 // 1000  # 200ms of 16-bit mono
                         for i in range(0, len(pcm), chunk_size):
-                            audio_frame = TTSAudioRawFrame(
+                            audio_frame = OutputAudioRawFrame(
                                 audio=pcm[i:i + chunk_size],
                                 sample_rate=self._sample_rate,
                                 num_channels=1,
