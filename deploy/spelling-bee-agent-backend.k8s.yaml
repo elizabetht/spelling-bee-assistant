@@ -41,14 +41,8 @@ spec:
                 secretKeyRef:
                   name: elevenlabs-api-key
                   key: api-key
-            - name: RIVA_TTS_URL
-              value: "grpc.nvcf.nvidia.com:443"
             - name: RIVA_TTS_VOICE_ID
-              value: "Magpie-Multilingual.EN-US.Sofia"
-            - name: RIVA_TTS_MODEL
-              value: "magpie_tts_ensemble-Magpie-Multilingual"
-            - name: RIVA_TTS_LANGUAGE
-              value: "en-US"
+              value: "Magpie-Multilingual.EN-US.Aria"
             - name: NVIDIA_API_KEY
               valueFrom:
                 secretKeyRef:

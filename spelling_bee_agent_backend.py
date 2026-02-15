@@ -39,6 +39,7 @@ except ImportError:
 
 try:
     from pipecat.audio.vad.silero import SileroVADAnalyzer
+    from pipecat.audio.vad.vad_analyzer import VADParams
     from pipecat.frames.frames import LLMMessagesFrame
     from pipecat.pipeline.pipeline import Pipeline
     from pipecat.pipeline.task import PipelineParams, PipelineTask
@@ -309,7 +310,14 @@ if PIPECAT_AVAILABLE:
             params=ACETransportParams(
                 audio_in_enabled=True,
                 audio_out_enabled=True,
-                vad_analyzer=SileroVADAnalyzer(),
+                vad_analyzer=SileroVADAnalyzer(
+                    params=VADParams(
+                        confidence=0.5,
+                        min_volume=0.2,
+                        start_secs=0.2,
+                        stop_secs=0.8,
+                    )
+                ),
                 audio_out_10ms_chunks=20,
             ),
         )
