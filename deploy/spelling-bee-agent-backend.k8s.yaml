@@ -41,13 +41,6 @@ spec:
                 secretKeyRef:
                   name: elevenlabs-api-key
                   key: api-key
-            - name: RIVA_TTS_VOICE_ID
-              value: "Magpie-Multilingual.EN-US.Mia"
-            - name: NVIDIA_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: nvidia-api-key
-                  key: api-key
           readinessProbe:
             tcpSocket:
               port: 8080

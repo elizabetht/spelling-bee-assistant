@@ -350,7 +350,6 @@ if PIPECAT_AVAILABLE:
         )
 
         llm = NvidiaLLMService(
-            api_key=os.getenv("NVIDIA_API_KEY"),
             base_url=os.getenv("NVIDIA_LLM_URL", VLLM_VL_BASE),
             model=os.getenv("NVIDIA_LLM_MODEL", VLLM_VL_MODEL),
         )
