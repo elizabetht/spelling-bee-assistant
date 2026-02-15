@@ -21,18 +21,7 @@ RUN NVPC=$(python -c "import nvidia_pipecat; import os; print(os.path.dirname(nv
         "$NVPC/transports/network/ace_fastapi_websocket.py" && \
     sed -i 's/is_binary = self._params.serializer.type == FrameSerializerType.BINARY/is_binary = True/' \
         "$NVPC/transports/network/ace_fastapi_websocket.py" && \
-    python -c "
-import pathlib, os, sys
-nvpc = sys.argv[1]
-f = pathlib.Path(nvpc + '/serializers/ace_websocket.py')
-src = f.read_text()
-src = src.replace('from pipecat.serializers.base_serializer import (\n    FrameSerializer,\n    FrameSerializerType,\n)', 'from pipecat.serializers.base_serializer import FrameSerializer')
-src = src.replace('def type(self) -> FrameSerializerType:', 'def type(self):')
-src = src.replace('return FrameSerializerType.BINARY', 'return True')
-src = src.replace('FrameSerializerType: Always returns BINARY type for this serializer.', 'bool: Always True (binary serializer).')
-src = src.replace('type (FrameSerializerType): The serializer type, always BINARY.', '')
-f.write_text(src)
-" "$NVPC"
+    python -c "import pathlib,sys;f=pathlib.Path(sys.argv[1]+'/serializers/ace_websocket.py');s=f.read_text();s=s.replace('from pipecat.serializers.base_serializer import (\n    FrameSerializer,\n    FrameSerializerType,\n)','from pipecat.serializers.base_serializer import FrameSerializer');s=s.replace('def type(self) -> FrameSerializerType:','def type(self):');s=s.replace('return FrameSerializerType.BINARY','return True');f.write_text(s)" "$NVPC"
 
 COPY spelling_bee_agent_backend.py ./
 COPY guardrails ./guardrails
