@@ -1,148 +1,249 @@
-# spelling-bee-assistant
+# Spelling Bee Assistant
 
-Spelling Bee backend with Pipecat voice pipeline (pattern adapted from `voice-agent-examples`).
+**An AI-powered voice coaching application that turns any word list image into an interactive spelling practice session using NVIDIA's full-stack AI platform.**
 
-This app uses a Pipecat-native quiz session with a lightweight upload bootstrap:
-1. Upload image to extract spelling words and receive a `session_id`
-2. Connect to Pipecat websocket with `session_id` and run voice quiz
+Students upload a photo of their spelling word list, and the assistant extracts the words using a vision-language model, then conducts a real-time voice-driven spelling quiz with pronunciation, definitions, example sentences, and encouragement — all guarded by NeMo Guardrails to keep the conversation child-safe and on-topic.
 
-## Clean Architecture Diagram
+---
 
-```mermaid
-flowchart LR
-		U[Child / Parent Client\nWeb UI or Voice Client]
+## Architecture
 
-		subgraph APP[Spelling Bee Agent Backend]
-			API[FastAPI\nPOST /upload-image]
-			WS[Pipecat WebSocket\n/pipecat/ws?session_id=...]
-			ORCH[Pipecat Pipeline]
-			STT[Riva ASR\nSpeech to Text]
-			GR[NeMo Guardrails\nInput/Output Policy]
-			LLM[NVIDIA LLM\nCoach Logic]
-			TTS[Riva TTS\nText to Speech]
-			SESS[Session Store Adapter]
-		end
-
-		VL[vLLM VL Model\nImage to Word List]
-		R[(Redis)]
-
-		U -->|Upload image| API
-		API -->|Extract words| VL
-		VL -->|Word list| API
-		API -->|Persist by session_id| SESS
-		SESS --> R
-		API -->|Return session_id| U
-
-		U -->|Connect with session_id| WS
-		WS --> ORCH
-		ORCH -->|Load session words| SESS
-		ORCH --> STT --> GR --> LLM --> GR --> TTS --> U
 ```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              USER (Browser)                                 │
+│                                                                             │
+│   ┌─────────────────────┐              ┌──────────────────────────────┐     │
+│   │   Upload Word List  │              │   Voice Spelling Session     │     │
+│   │   Image (REST)      │              │   (WebSocket Audio)          │     │
+│   └────────┬────────────┘              └──────────────┬───────────────┘     │
+└────────────┼──────────────────────────────────────────┼─────────────────────┘
+             │                                          │
+             ▼                                          ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│                        FastAPI Backend (:8080)                              │
+│                                                                            │
+│   ┌────────────────────┐         ┌───────────────────────────────────┐     │
+│   │  POST /upload-image│         │  WS /pipecat/ws                  │     │
+│   │                    │         │                                   │     │
+│   │  1. Decode image   │         │  Pipecat ACE Pipeline            │     │
+│   │  2. Extract words  │         │  ┌─────────────────────────────┐ │     │
+│   │     via VLM        │         │  │                             │ │     │
+│   │  3. Store in Redis │         │  │  Audio In ──► Riva ASR      │ │     │
+│   │  4. Return         │         │  │                 │            │ │     │
+│   │     session_id     │         │  │                 ▼            │ │     │
+│   │                    │         │  │         NeMo Guardrails      │ │     │
+│   └────────┬───────────┘         │  │                 │            │ │     │
+│            │                     │  │                 ▼            │ │     │
+│            │                     │  │          NVIDIA LLM          │ │     │
+│            │                     │  │       (Spelling Coach)       │ │     │
+│            │                     │  │                 │            │ │     │
+│            │                     │  │                 ▼            │ │     │
+│            │                     │  │           Riva TTS           │ │     │
+│            │                     │  │                 │            │ │     │
+│            │                     │  │                 ▼            │ │     │
+│            │                     │  │           Audio Out          │ │     │
+│            │                     │  │                             │ │     │
+│            │                     │  └─────────────────────────────┘ │     │
+│            │                     └───────────────────────────────────┘     │
+│            │                                    │                          │
+│            ▼                                    ▼                          │
+│   ┌─────────────────────────────────────────────────────┐                  │
+│   │                   Redis                             │                  │
+│   │   Session words, progress, chat history (24h TTL)   │                  │
+│   └─────────────────────────────────────────────────────┘                  │
+└────────────────────────────────────────────────────────────────────────────┘
+             │                                    │
+             ▼                                    ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│                          NVIDIA AI Services                                │
+│                                                                            │
+│   ┌──────────────────┐  ┌──────────────┐  ┌────────────────────────────┐  │
+│   │  Nemotron-Nano   │  │  Riva ASR    │  │  Riva TTS                  │  │
+│   │  VL-8B (vLLM)    │  │  Parakeet    │  │  Magpie-Multilingual Sofia │  │
+│   │                  │  │  1.1B        │  │                            │  │
+│   │  Image → Words   │  │  Speech →    │  │  Text → Speech             │  │
+│   │  Definitions     │  │  Text        │  │                            │  │
+│   │  Sentences       │  │              │  │                            │  │
+│   └──────────────────┘  └──────────────┘  └────────────────────────────┘  │
+│                                                                            │
+│   ┌──────────────────┐  ┌──────────────────────────────────────────────┐  │
+│   │  NVIDIA LLM      │  │  NeMo Guardrails                            │  │
+│   │  Llama-3.1-8B    │  │  Topic enforcement, intent filtering,       │  │
+│   │  Instruct        │  │  child-safe content policy                   │  │
+│   └──────────────────┘  └──────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Component Summary
+
+| Component | Technology | Role |
+|---|---|---|
+| **Voice Pipeline** | NVIDIA Pipecat (ACE) | Orchestrates real-time audio I/O, ASR, LLM, and TTS |
+| **Vision-Language Model** | Nemotron-Nano-VL-8B via vLLM | Extracts spelling words from uploaded images |
+| **Speech Recognition** | Riva ASR (Parakeet 1.1B) | Streaming speech-to-text with VAD |
+| **Text-to-Speech** | Riva TTS (Magpie Sofia) | Natural voice output for the spelling coach |
+| **Conversational LLM** | Llama-3.1-8B-Instruct | Powers the interactive spelling coach persona |
+| **Safety** | NeMo Guardrails | Enforces spelling-only scope, filters off-topic intent |
+| **Session Store** | Redis + LangChain | Persistent word lists, progress, and chat history |
+| **Fallback OCR** | Tesseract (pytesseract) | Backup word extraction when VLM is unavailable |
+| **Web Framework** | FastAPI + Uvicorn | REST API, WebSocket transport, static UI |
+| **Orchestration** | Kubernetes (microk8s) | Multi-node GPU-aware deployment |
+
+## User Flow
+
+```
+ ┌──────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+ │  Upload  │     │  Words       │     │  Voice       │     │  Interactive │
+ │  word    │────►│  extracted   │────►│  session     │────►│  spelling    │
+ │  list    │     │  via VLM     │     │  begins      │     │  practice    │
+ │  image   │     │  + stored    │     │  (WebSocket) │     │  with coach  │
+ └──────────┘     └──────────────┘     └──────────────┘     └──────────────┘
+                                                                    │
+                                              ┌─────────────────────┤
+                                              ▼                     ▼
+                                       "Use it in a          "What does it
+                                        sentence?"             mean?"
+                                              │                     │
+                                              ▼                     ▼
+                                        VLM generates         VLM generates
+                                        child-friendly        age-appropriate
+                                        sentence              definition
+```
+
+**During a session, the student can:**
+- Hear the word pronounced
+- Ask for it in a sentence
+- Request a definition
+- Spell the word aloud and receive feedback
+- Skip to the next word
+- Receive encouragement throughout
 
 ## Deployment Diagram
 
-```mermaid
-flowchart TB
-		subgraph C[controller node]
-			UI[spellingbee-ui\nNodePort 30080]
-			GW[spellingbee-gateway\nClusterIP 8080]
-			BE[spelling-bee-agent-backend\nNodePort 30088]
-			REDIS[redis\nClusterIP 6379]
-		end
-
-		subgraph S1[spark-01 GPU node]
-			VL1[vllm-nemotron-nano-vl-8b\nNodePort 30566]
-			TXT1[vllm-llama-31-8b\nClusterIP 8000]
-		end
-
-		subgraph S2[spark-02 GPU node]
-			VL2[(optional replica)]
-			TXT2[(optional replica)]
-		end
-
-		USER[Browser / Voice Client]
-
-		USER -->|HTTP| UI
-		USER -->|HTTP/WS| BE
-		BE -->|session memory| REDIS
-		BE -->|VL inference| VL1
-		BE -->|LLM text inference| TXT1
-		GW -->|internal API calls (optional)| BE
-
-		VL1 -. scale out .-> VL2
-		TXT1 -. scale out .-> TXT2
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│                        Kubernetes Cluster (microk8s)                  │
+│                        Namespace: spellingbee                         │
+│                                                                      │
+│   ┌─────────────────────────────────────┐                            │
+│   │         Controller Node             │                            │
+│   │                                     │                            │
+│   │   ┌───────────────────────────┐     │                            │
+│   │   │  Backend Pod              │     │                            │
+│   │   │  spelling-bee-agent       │     │   ┌──────────────────────┐ │
+│   │   │  NodePort :30088          │     │   │    GPU Node          │ │
+│   │   └───────────┬───────────────┘     │   │                      │ │
+│   │               │                     │   │   ┌────────────────┐ │ │
+│   │   ┌───────────▼───────────────┐     │   │   │  vLLM Pod      │ │ │
+│   │   │  Redis Pod                │     │   │   │  Nemotron-Nano │ │ │
+│   │   │  Session Store            │     │   │   │  VL-8B         │ │ │
+│   │   └───────────────────────────┘     │   │   │  NodePort      │ │ │
+│   │                                     │   │   │  :30566        │ │ │
+│   └─────────────────────────────────────┘   │   │  GPU: GB10     │ │ │
+│                                              │   └────────────────┘ │ │
+│                                              └──────────────────────┘ │
+│                                                                      │
+│   External (NVIDIA Cloud):                                           │
+│     • Riva ASR  → grpc.nvcf.nvidia.com:443                          │
+│     • Riva TTS  → grpc.nvcf.nvidia.com:443                          │
+│     • LLM API   → integrate.api.nvidia.com/v1                       │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
-## Run
+## NVIDIA Technologies Used
 
-Python requirement: `3.12+` (required by NVIDIA Pipecat).
+- **NVIDIA Pipecat (ACE)** — Real-time voice agent pipeline framework
+- **Riva ASR** — Automatic speech recognition (Parakeet 1.1B, streaming with Silero VAD)
+- **Riva TTS** — Text-to-speech synthesis (Magpie-Multilingual Sofia EN-US)
+- **Nemotron-Nano-VL-8B** — Vision-language model for image understanding, served via vLLM
+- **NeMo Guardrails** — Programmable safety rails for topic enforcement and content filtering
+- **NVIDIA LLM API** — Llama-3.1-8B-Instruct for conversational coaching
+- **NVIDIA Container Runtime** — GPU-accelerated container execution
 
-Install dependencies:
+## Getting Started
+
+**Requirements:** Python 3.12+ (required by NVIDIA Pipecat)
 
 ```bash
+# Install dependencies
 pip install -r requirements.txt
-```
 
-Note: Pipecat is installed from NVIDIA source (`voice-agent-examples`) in `requirements.txt`.
-The Docker image installs a C++ toolchain because some dependencies (for example `annoy`) compile native extensions.
+# Set required environment variables
+export NVIDIA_API_KEY=<your-key>
+export RIVA_ASR_URL=grpc.nvcf.nvidia.com:443
+export RIVA_TTS_URL=grpc.nvcf.nvidia.com:443
 
-Start backend:
+# Optional: enable guardrails
+export ENABLE_NEMO_GUARDRAILS=true
+export NEMO_GUARDRAILS_CONFIG_PATH=./guardrails
 
-```bash
+# Start the server
 python spelling_bee_agent_backend.py
 ```
 
-Server runs on `http://0.0.0.0:8080`.
+Open `http://localhost:8080` to access the test UI.
 
-## Deploy to microk8s
-
-This repo includes a backend container file at `Dockerfile`.
-
-Build and push your backend image to local registry (example):
+## Deploy to Kubernetes
 
 ```bash
-docker build -t localhost:32000/spelling-bee-agent-backend:0.1 .
-docker push localhost:32000/spelling-bee-agent-backend:0.1
+# Deploy vLLM model + backend together
+./scripts/deploy_all.sh
+
+# Or separately
+./scripts/deploy_model.sh      # vLLM vision-language model (GPU node)
+./scripts/deploy_backend.sh    # FastAPI backend (controller node)
+
+# With secret creation
+CREATE_SECRET=true NVIDIA_API_KEY_VALUE=<key> ./scripts/deploy_backend.sh
 ```
 
-Create secret and deploy:
+## Smoke Test
 
 ```bash
-kubectl -n spellingbee create secret generic nvidia-api-key --from-literal=api-key=<YOUR_KEY>
-kubectl apply -f spelling-bee-agent-backend.k8s.yaml
+./scripts/smoke_test.sh http://localhost:8080 ./path/to/words-image.png
 ```
 
-Check rollout:
+## API
 
-```bash
-kubectl get pods -n spellingbee -o wide
-kubectl get svc -n spellingbee spelling-bee-agent-backend
+| Endpoint | Method | Description |
+|---|---|---|
+| `/` | GET | Test UI |
+| `/healthz` | GET | Health check (reports Pipecat availability) |
+| `/upload-image` | POST | Upload word list image, returns `session_id` |
+| `/pipecat/ws` | WebSocket | Voice session — connect with `?session_id=<id>` |
+
+## Project Structure
+
+```
+spelling-bee-assistant/
+├── spelling_bee_agent_backend.py   # FastAPI backend + Pipecat pipeline
+├── ui/
+│   └── index.html                  # Browser-based test UI
+├── guardrails/
+│   ├── config.yml                  # NeMo Guardrails model config
+│   └── rails.co                    # Intent policies (spelling scope)
+├── scripts/
+│   ├── deploy_all.sh               # Deploy model + backend
+│   ├── deploy_backend.sh           # Deploy backend only
+│   ├── deploy_model.sh             # Deploy vLLM model only
+│   └── smoke_test.sh               # End-to-end integration test
+├── spelling-bee-agent-backend.k8s.yaml  # K8s backend manifest
+├── vllm-nemotron-nano-vl-8b.yaml        # K8s vLLM model manifest
+├── Dockerfile                      # Backend container image
+└── requirements.txt                # Python dependencies
 ```
 
-If pods show `ImagePullBackOff`, rebuild and restart deployment:
+## Environment Variables
 
-```bash
-docker build -t localhost:32000/spelling-bee-agent-backend:0.1 .
-docker push localhost:32000/spelling-bee-agent-backend:0.1
-kubectl -n spellingbee rollout restart deploy/spelling-bee-agent-backend
-kubectl -n spellingbee get pods -w
-```
-
-## Required Environment Variables
-
-Set NVIDIA/Riva variables such as `NVIDIA_API_KEY`, `RIVA_ASR_URL`, `RIVA_TTS_URL`.
-
-For NeMo Guardrails:
-- `ENABLE_NEMO_GUARDRAILS=true`
-- `NEMO_GUARDRAILS_CONFIG_PATH=./guardrails`
-
-## API Endpoints
-
-- `POST /upload-image` → upload image and get `session_id`
-- `WS /pipecat/ws` → Pipecat ACE websocket route (available when Pipecat deps are installed)
-
-## Notes
-
-- Quiz words are injected into Pipecat context from uploaded session data.
-- Connect using: `/pipecat/ws?session_id=<session_id>`
-- Guardrails policy files are in `guardrails/config.yml` and `guardrails/rails.co`.
+| Variable | Default | Description |
+|---|---|---|
+| `NVIDIA_API_KEY` | — | NVIDIA API authentication (required) |
+| `RIVA_ASR_URL` | — | Riva ASR endpoint (required) |
+| `RIVA_TTS_URL` | — | Riva TTS endpoint (required) |
+| `ENABLE_NEMO_GUARDRAILS` | `false` | Enable NeMo Guardrails |
+| `NEMO_GUARDRAILS_CONFIG_PATH` | `./guardrails` | Path to guardrails config |
+| `REDIS_URL` | `redis://localhost:6379/0` | Redis connection URL |
+| `VLLM_VL_BASE` | `http://vllm-nemotron-nano-vl-8b:5566/v1` | vLLM endpoint |
+| `VLLM_VL_MODEL` | `nvidia/Llama-3.1-Nemotron-Nano-VL-8B-V1` | Vision-language model |
+| `NVIDIA_LLM_URL` | `https://integrate.api.nvidia.com/v1` | NVIDIA LLM API |
+| `NVIDIA_LLM_MODEL` | `meta/llama-3.1-8b-instruct` | Conversational LLM |
