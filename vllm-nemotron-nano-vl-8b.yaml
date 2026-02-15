@@ -44,7 +44,7 @@ spec:
             limits:
               nvidia.com/gpu: 1
           args:
-            - "nvidia/Llama-3.1-Nemotron-Nano-VL-8B-V1"
+            - "nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-FP8"
             - "--trust-remote-code"
             - "--gpu-memory-utilization"
             - "0.3"
