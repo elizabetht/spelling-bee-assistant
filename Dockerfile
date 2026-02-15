@@ -15,6 +15,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 COPY spelling_bee_agent_backend.py ./
 COPY guardrails ./guardrails
+COPY ui ./ui
 
 EXPOSE 8080
 
