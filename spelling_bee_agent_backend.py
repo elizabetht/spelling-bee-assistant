@@ -77,6 +77,7 @@ except ImportError:
 import logging
 
 logging.getLogger("pipecat.serializers.protobuf").setLevel(logging.ERROR)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
