@@ -460,7 +460,6 @@ registerProcessor('capture-processor', CaptureProcessor);
     let scoreCorrect = 0;
     let scoreIncorrect = 0;
     let currentWord = '-';
-    let wordNumber = 0;
 
     // ===================== DOM refs =====================
     const stepUpload = document.getElementById('stepUpload');
@@ -482,10 +481,12 @@ registerProcessor('capture-processor', CaptureProcessor);
     const scoreProgressEl = document.getElementById('scoreProgress');
 
     function updateScoreUI() {
-      scoreWordEl.textContent = wordNumber > 0 ? `#${wordNumber}` : '#0';
+      // Derive round from actual outcomes: current round = attempts so far + 1
+      const attempted = scoreCorrect + scoreIncorrect;
+      const round = totalWords > 0 ? Math.min(attempted + 1, totalWords) : attempted + 1;
+      scoreWordEl.textContent = `#${round}`;
       scoreCorrectEl.textContent = scoreCorrect;
       scoreIncorrectEl.textContent = scoreIncorrect;
-      const attempted = scoreCorrect + scoreIncorrect;
       scoreProgressEl.textContent = totalWords > 0 ? `${attempted} / ${totalWords}` : '-';
     }
 
@@ -540,10 +541,11 @@ registerProcessor('capture-processor', CaptureProcessor);
       for (const pat of wordPatterns) {
         const m = text.match(pat);
         if (m && m[1] && m[1].length > 1) {
-          currentWord = m[1].toLowerCase();
-          wordNumber++;
-          console.log('[Score] New word detected:', currentWord, 'round:', wordNumber);
-          updateScoreUI();
+          const detected = m[1].toLowerCase();
+          if (detected !== currentWord) {
+            currentWord = detected;
+            console.log('[Score] New word detected:', currentWord);
+          }
           break;
         }
       }
@@ -716,7 +718,6 @@ registerProcessor('capture-processor', CaptureProcessor);
         scoreCorrect = 0;
         scoreIncorrect = 0;
         currentWord = '-';
-        wordNumber = 0;
         updateScoreUI();
 
         // Open WebSocket
