@@ -210,7 +210,7 @@ kubectl -n spellingbee create secret generic hf-token \
   --from-literal=token=<YOUR_HF_TOKEN>
 ```
 
-**2. Deploy everything (model + Redis + backend)**
+**2. Deploy everything (models + Redis + backend)**
 
 ```bash
 ./deploy/deploy_all.sh
@@ -287,7 +287,9 @@ spelling-bee-assistant/
 | `ENABLE_NEMO_GUARDRAILS` | `false` | Enable NeMo Guardrails |
 | `NEMO_GUARDRAILS_CONFIG_PATH` | `./guardrails` | Path to guardrails config |
 | `REDIS_URL` | `redis://localhost:6379/0` | Redis connection URL |
-| `VLLM_VL_BASE` | `http://vllm-nemotron-nano-vl-8b:5566/v1` | vLLM endpoint |
-| `VLLM_VL_MODEL` | `nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-FP8` | Vision-language model |
-| `NVIDIA_LLM_URL` | Same as `VLLM_VL_BASE` | LLM endpoint for voice pipeline |
-| `NVIDIA_LLM_MODEL` | Same as `VLLM_VL_MODEL` | LLM model for voice pipeline |
+| `VLLM_VL_BASE` | `http://vllm-nemotron-nano-vl-8b:5566/v1` | VLM endpoint for image word extraction |
+| `VLLM_VL_MODEL` | `nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-FP8` | Vision-language model for image extraction |
+| `VLLM_LLM_BASE` | `http://vllm-nemotron-nano-30b:5567/v1` | LLM endpoint for voice coaching |
+| `VLLM_LLM_MODEL` | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` | Conversational LLM for voice pipeline |
+| `NVIDIA_LLM_URL` | Same as `VLLM_LLM_BASE` | Override LLM endpoint for voice pipeline |
+| `NVIDIA_LLM_MODEL` | Same as `VLLM_LLM_MODEL` | Override LLM model for voice pipeline |
