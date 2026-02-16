@@ -150,9 +150,12 @@ def _resolve_llm_endpoint() -> tuple:
     env_url = os.getenv("NVIDIA_LLM_URL")
     env_model = os.getenv("NVIDIA_LLM_MODEL")
     if env_url or env_model:
-        return (env_url or VLLM_LLM_BASE, env_model or VLLM_LLM_MODEL)
+        resolved = (env_url or VLLM_LLM_BASE, env_model or VLLM_LLM_MODEL)
+        logger.info("LLM endpoint resolved via env override: %s / %s", *resolved)
+        return resolved
 
     if _check_model_health(VLLM_LLM_BASE):
+        logger.info("LLM endpoint resolved to 30B model: %s / %s", VLLM_LLM_BASE, VLLM_LLM_MODEL)
         return (VLLM_LLM_BASE, VLLM_LLM_MODEL)
 
     logger.warning(
