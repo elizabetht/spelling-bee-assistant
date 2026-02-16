@@ -43,10 +43,12 @@ try:
     from pipecat.frames.frames import (
         BotStoppedSpeakingFrame,
         Frame,
+        InterimTranscriptionFrame,
         LLMMessagesFrame,
         OutputAudioRawFrame,
         OutputTransportMessageFrame,
         TextFrame,
+        TranscriptionFrame,
         TTSAudioRawFrame,
     )
     from pipecat.pipeline.pipeline import Pipeline
@@ -139,6 +141,29 @@ if PIPECAT_AVAILABLE:
             await super().process_frame(frame, direction)
             if isinstance(frame, TextFrame) and frame.text:
                 frame.text = self._MARKDOWN_RE.sub('', frame.text)
+            await self.push_frame(frame, direction)
+
+    class UserTranscriptBridge(FrameProcessor):
+        """Forward user STT transcription frames to the browser as JSON messages.
+
+        The pipeline sends TranscriptionFrame/InterimTranscriptionFrame to the
+        LLM context aggregator, but they never reach the transport output.
+        This processor converts them to OutputTransportMessageFrame (asr_update /
+        asr_end) so the browser can display what the child is saying.
+        """
+
+        async def process_frame(self, frame: Frame, direction: FrameDirection):
+            await super().process_frame(frame, direction)
+            if isinstance(frame, InterimTranscriptionFrame):
+                msg = OutputTransportMessageFrame(
+                    message={"type": "asr_update", "text": frame.text}
+                )
+                await self.push_frame(msg, direction)
+            elif isinstance(frame, TranscriptionFrame):
+                msg = OutputTransportMessageFrame(
+                    message={"type": "asr_end", "text": frame.text}
+                )
+                await self.push_frame(msg, direction)
             await self.push_frame(frame, direction)
 
     class TranscriptBridge(FrameProcessor):
@@ -674,12 +699,14 @@ if PIPECAT_AVAILABLE:
 
         md_stripper = MarkdownStripper()
         transcript_bridge = TranscriptBridge()
+        user_transcript_bridge = UserTranscriptBridge()
         incorrect_tracker = IncorrectWordTracker(session_id, session_words, messages)
 
         pipeline = Pipeline(
             [
                 transport.input(),
                 stt,
+                user_transcript_bridge,
                 stt_transcript_synchronization,
                 context_aggregator.user(),
                 llm,
