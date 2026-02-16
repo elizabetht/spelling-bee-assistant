@@ -1203,26 +1203,61 @@ registerProcessor('capture-processor', CaptureProcessor);
     });
 
     endBtn.addEventListener('click', () => {
+      // During review phase, "Finish Review" just ends
+      if (isReviewPhase) {
+        doEndSession();
+        return;
+      }
+
       const attempted = scoreCorrect + scoreIncorrect;
-      if (attempted < 25) {
+
+      // Step 1: Nudge to reach 25 words
+      if (!practiceComplete && attempted < 25 && totalWords >= 25) {
         const remaining = 25 - attempted;
-        if (!confirm(`You've only practiced ${attempted} word${attempted !== 1 ? 's' : ''} so far! Try to do at least 25. Only ${remaining} more to go!\n\nAre you sure you want to stop?`)) {
+        if (!confirm(
+          `You've only practiced ${attempted} word${attempted !== 1 ? 's' : ''} so far!\n` +
+          `Try to do at least 25 — only ${remaining} more to go!\n\n` +
+          `Are you sure you want to stop?`
+        )) {
+          return; // child chose to keep going
+        }
+      }
+
+      // Step 2: Offer review if there are incorrect words
+      if (scoreIncorrect > 0 && !practiceComplete) {
+        const choice = confirm(
+          `You got ${scoreIncorrect} word${scoreIncorrect !== 1 ? 's' : ''} incorrect.\n\n` +
+          `Would you like to review them before ending?`
+        );
+        if (choice) {
+          isReviewPhase = true;
+          reviewCorrect = 0;
+          updateScoreUI();
+          statusLabel.textContent = 'Say "I want to review" to the tutor...';
+          endBtn.textContent = 'Finish Review';
           return;
         }
       }
+
+      // Step 3: Actually end
+      doEndSession();
+    });
+
+    function doEndSession() {
       if (ws) ws.close();
       cleanup();
-      // Return to upload view
       sessionView.classList.add('hidden');
       stepUpload.classList.remove('hidden');
       stepConnect.classList.remove('hidden');
-      // Reset transcript and score
       transcript.innerHTML = '<div class="transcript-empty">Waiting for conversation to start...</div>';
       currentUserEntry = null;
       currentBotEntry = null;
       botUtteranceBuffer = '';
       statusLabel.textContent = 'Connecting...';
-    });
+      endBtn.textContent = 'End Practice';
+      practiceComplete = false;
+      isReviewPhase = false;
+    }
 
     function cleanup() {
       if (botUtteranceTimer) { clearTimeout(botUtteranceTimer); botUtteranceTimer = null; }

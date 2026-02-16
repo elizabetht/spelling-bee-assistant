@@ -591,6 +591,8 @@ if PIPECAT_AVAILABLE:
                     "- After saying 'All done!' ALWAYS check: if the child got ANY "
                     "words wrong during this session, say EXACTLY: "
                     "'Would you like to review the words you missed?'\n"
+                    "- If the child says 'I want to review' or 'review' at any time, "
+                    "re-quiz ONLY the words they got wrong so far, in the same format.\n"
                     "- If the child says yes to review, re-quiz ONLY the missed words "
                     "in the same format. After the review round, say: "
                     "'Great practice today! Keep it up!'\n"
