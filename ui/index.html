@@ -507,8 +507,22 @@ registerProcessor('capture-processor', CaptureProcessor);
       if (!text) return;
       console.log('[Score] parseScoreFromText called with:', JSON.stringify(text));
 
-      // Detect correct
-      if ((/\bcorrect\b/i.test(text) && !/\bincorrect\b/i.test(text) && !/\bnot\s+(quite\s+)?correct\b/i.test(text)) ||
+      // Check INCORRECT first — "Not quite. The correct spelling is X" contains
+      // the word "correct" but is actually an incorrect judgment.
+      if (/\bnot\s+quite\b/i.test(text) ||
+          /\bincorrect\b/i.test(text) ||
+          /\bthe\s+correct\s+spelling\s+is\b/i.test(text) ||
+          /\blet'?s\s+try\s+(again|that)\b/i.test(text) ||
+          /\bspelled\s+(it\s+)?wrong/i.test(text) ||
+          /\bnot\s+(right|correct)\b/i.test(text) ||
+          /\bnot\s+the\s+right\b/i.test(text) ||
+          /\boops\b/i.test(text) ||
+          /\bclose,?\s+but\b/i.test(text) ||
+          /\balmost\b/i.test(text)) {
+        scoreIncorrect++;
+        console.log('[Score] INCORRECT detected! total:', scoreIncorrect);
+        updateScoreUI();
+      } else if ((/\bcorrect\b/i.test(text) && !/\bincorrect\b/i.test(text)) ||
           /\bthat'?s\s+(right|correct)\b/i.test(text) ||
           /\bwell\s+done\b/i.test(text) ||
           /\bgreat\s+(job|spelling|work)\b/i.test(text) ||
@@ -524,18 +538,6 @@ registerProcessor('capture-processor', CaptureProcessor);
         scoreCorrect++;
         if (isReviewPhase) reviewCorrect++;
         console.log('[Score] CORRECT detected! total:', scoreCorrect, isReviewPhase ? 'review:' + reviewCorrect : '');
-        updateScoreUI();
-      } else if (/\bincorrect\b/i.test(text) ||
-                 /\bnot\s+(quite|right|correct)\b/i.test(text) ||
-                 /\blet'?s\s+try\s+(again|that)\b/i.test(text) ||
-                 /\bthe\s+correct\s+spelling\s+is\b/i.test(text) ||
-                 /\bspelled\s+(it\s+)?wrong/i.test(text) ||
-                 /\boops\b/i.test(text) ||
-                 /\bnot\s+the\s+right\b/i.test(text) ||
-                 /\bclose,?\s+but\b/i.test(text) ||
-                 /\balmost\b/i.test(text)) {
-        scoreIncorrect++;
-        console.log('[Score] INCORRECT detected! total:', scoreIncorrect);
         updateScoreUI();
       } else {
         console.log('[Score] No correct/incorrect pattern matched in:', text.substring(0, 100));

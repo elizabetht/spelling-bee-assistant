@@ -549,7 +549,7 @@ if PIPECAT_AVAILABLE:
 
         tts = ElevenLabsTTSService(
             api_key=os.getenv("ELEVENLABS_API_KEY"),
-            voice_id=os.getenv("ELEVENLABS_TTS_VOICE_ID", "9BWtsMINqrJLrRacOk9x"),
+            voice_id=os.getenv("ELEVENLABS_TTS_VOICE_ID", "3vbrfmIQGJrswxh7ife4"),
             model="eleven_turbo_v2_5",
             sample_rate=16000,
         )
