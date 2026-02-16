@@ -528,7 +528,7 @@ def initialize_nemo_guardrails() -> None:
     try:
         # Read config and resolve env-var placeholders that NeMo doesn't expand
         raw_yaml = (config_path / "config.yml").read_text()
-        _, resolved_model = _resolve_llm_endpoint()
+        resolved_model = os.getenv("NVIDIA_LLM_MODEL", VLLM_VL_MODEL)
         raw_yaml = raw_yaml.replace("__NVIDIA_LLM_MODEL__", resolved_model)
         # Load Colang files from the config directory
         colang_content = ""
@@ -763,6 +763,7 @@ if PIPECAT_AVAILABLE:
             api_key="not-needed",
             base_url=llm_base,
             model=llm_model,
+            params=NvidiaLLMService.InputParams(max_completion_tokens=200),
         )
 
         stt = ElevenLabsRealtimeSTTService(
