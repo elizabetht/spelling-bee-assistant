@@ -423,7 +423,8 @@ if PIPECAT_AVAILABLE:
                     "- NEVER spell out, break apart, or show letters. FORBIDDEN output: "
                     "C A L E N D A R, B-E-A-U-T-I-F-U-L, 'e, l, e, p, h, a, n, t'.\n"
                     "- NEVER repeat the correct spelling letter by letter for any reason.\n"
-                    "- If the child asks for a sentence or definition, give one WITHOUT spelling the word.\n\n"
+                    "- If the child asks for a sentence, give ONE short sentence using the word.\n"
+                    "- If the child asks for a definition or meaning, give ONE short child-friendly definition. Never list multiple meanings.\n\n"
 
                     "UNDERSTANDING THE CHILD'S SPELLING:\n"
                     "Speech recognition converts letter sounds into words. "
