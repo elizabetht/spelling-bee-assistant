@@ -328,6 +328,8 @@ if PIPECAT_AVAILABLE:
             """Called when a review word is judged."""
             self._review_index += 1
 
+        _VERDICT_TAG = "[INTERNAL — DO NOT READ ALOUD OR RECAP]"
+
         async def process_frame(self, frame: Frame, direction: FrameDirection):
             await super().process_frame(frame, direction)
 
@@ -336,6 +338,11 @@ if PIPECAT_AVAILABLE:
                 cleaned = self._clean_text(frame.text)
                 if cleaned != frame.text:
                     frame.text = cleaned
+
+                # Only verify on FINAL transcriptions, not interims
+                if isinstance(frame, InterimTranscriptionFrame):
+                    await self.push_frame(frame, direction)
+                    return
 
                 # Try to extract a letter sequence and verify spelling
                 letters = self._extract_letters(cleaned)
@@ -372,10 +379,17 @@ if PIPECAT_AVAILABLE:
                                     f"All done!'"
                                 )
 
+                        # Remove any stale verdict messages before adding new one
+                        self._messages[:] = [
+                            m for m in self._messages
+                            if not (m.get("role") == "system"
+                                    and self._VERDICT_TAG in m.get("content", ""))
+                        ]
+
                         result_msg = {
                             "role": "system",
                             "content": (
-                                f"[INTERNAL — DO NOT READ ALOUD OR RECAP] "
+                                f"{self._VERDICT_TAG} "
                                 f"Verdict: {verdict}. {say} "
                                 f"Do NOT add anything else."
                             ),
