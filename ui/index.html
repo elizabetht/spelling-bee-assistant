@@ -952,6 +952,7 @@ registerProcessor('capture-processor', CaptureProcessor);
           }
           playAudioChunk(frame.pcm, frame.sampleRate);
         } else if (frame.type === 'transcription') {
+          console.log('[ASR] User transcription:', JSON.stringify(frame.text));
           // ASR transcription from user speech — finalize any pending bot utterance
           if (botUtteranceBuffer) {
             parseScoreFromText(botUtteranceBuffer);
