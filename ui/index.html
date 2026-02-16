@@ -501,7 +501,8 @@ registerProcessor('capture-processor', CaptureProcessor);
     let isReviewPhase = false;
     let reviewCorrect = 0;
     let practiceComplete = false;
-    let serverVerdictWord = null; // track last word judged by server to avoid double-count
+    let serverVerdictWord = null; // track last word judged by server to avoid double-count with text parser
+    let lastVerdictKey = null;   // "word:SPELLED" dedup key to ignore duplicate STT finals
 
     // ===================== DOM refs =====================
     const stepUpload = document.getElementById('stepUpload');
@@ -825,6 +826,8 @@ registerProcessor('capture-processor', CaptureProcessor);
         isReviewPhase = false;
         reviewCorrect = 0;
         practiceComplete = false;
+        serverVerdictWord = null;
+        lastVerdictKey = null;
         updateScoreUI();
 
         // Open WebSocket
@@ -1089,9 +1092,20 @@ registerProcessor('capture-processor', CaptureProcessor);
       // Server-side spelling verdict — update score directly
       if (type === 'spelling_verdict') {
         const v = msg.verdict; // "correct" or "incorrect"
-        const word = msg.word || '';
+        const word = (msg.word || '').toLowerCase();
+        const spelled = (msg.spelled || '').toUpperCase();
         const nextWord = msg.next_word || null;
-        console.log('[Score] spelling_verdict from server:', v, 'word:', word, 'next:', nextWord);
+        console.log('[Score] spelling_verdict from server:', v, 'word:', word, 'spelled:', spelled, 'next:', nextWord);
+
+        // Dedup: ElevenLabs STT fires duplicate finals, causing duplicate
+        // verdicts for the same (word, spelled) pair. Only count once.
+        const verdictKey = `${word}:${spelled}`;
+        if (verdictKey === lastVerdictKey) {
+          console.log('[Score] Duplicate verdict ignored for:', verdictKey);
+          return;
+        }
+        lastVerdictKey = verdictKey;
+
         if (v === 'correct') {
           scoreCorrect++;
           if (isReviewPhase) reviewCorrect++;
@@ -1100,7 +1114,7 @@ registerProcessor('capture-processor', CaptureProcessor);
           scoreIncorrect++;
           console.log('[Score] INCORRECT (server)! total:', scoreIncorrect);
         }
-        serverVerdictWord = word.toLowerCase();
+        serverVerdictWord = word;
         if (nextWord) {
           currentWord = nextWord.toLowerCase();
         }
