@@ -1015,12 +1015,14 @@ registerProcessor('capture-processor', CaptureProcessor);
 
       if (type === 'asr_update') {
         // Interim user speech
+        console.log('[ASR] asr_update (interim):', JSON.stringify(msg.text || msg.data || ''));
         if (!currentUserEntry) {
           currentUserEntry = addTranscriptEntry('user');
         }
         updateTranscriptText(currentUserEntry, msg.text || msg.data || '', true);
       } else if (type === 'asr_end') {
         // Final user speech
+        console.log('[ASR] asr_end (final):', JSON.stringify(msg.text || msg.data || ''));
         if (!currentUserEntry) {
           currentUserEntry = addTranscriptEntry('user');
         }
