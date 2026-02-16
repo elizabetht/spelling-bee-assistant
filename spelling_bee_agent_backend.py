@@ -178,8 +178,8 @@ def initialize_nemo_guardrails() -> None:
     try:
         rails_config = RailsConfig.from_path(str(config_path))
         NEMO_RAILS = LLMRails(rails_config)
-    except Excepti
-    
+    except Exception as e:
+        logger.warning("NeMo Guardrails init failed: %s", e)
         NEMO_RAILS = None
 
 
