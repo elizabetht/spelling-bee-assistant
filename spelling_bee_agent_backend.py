@@ -135,7 +135,9 @@ if PIPECAT_AVAILABLE:
                 # Send cleaned text to client via OutputTransportMessageFrame
                 msg = json.dumps({"type": "tts_update", "text": cleaned})
                 await self.push_frame(OutputTransportMessageFrame(message=msg), direction)
-            await self.push_frame(frame, direction)
+                await self.push_frame(frame, direction)
+            else:
+                await super().process_frame(frame, direction)
 
 
 def get_session_words(session_id: str) -> List[str]:
