@@ -460,6 +460,9 @@ registerProcessor('capture-processor', CaptureProcessor);
     let scoreCorrect = 0;
     let scoreIncorrect = 0;
     let currentWord = '-';
+    let isReviewPhase = false;
+    let reviewCorrect = 0;
+    let practiceComplete = false;
 
     // ===================== DOM refs =====================
     const stepUpload = document.getElementById('stepUpload');
@@ -481,13 +484,22 @@ registerProcessor('capture-processor', CaptureProcessor);
     const scoreProgressEl = document.getElementById('scoreProgress');
 
     function updateScoreUI() {
-      // Derive round from actual outcomes: current round = attempts so far + 1
       const attempted = scoreCorrect + scoreIncorrect;
-      const round = totalWords > 0 ? Math.min(attempted + 1, totalWords) : attempted + 1;
-      scoreWordEl.textContent = `#${round}`;
+      if (practiceComplete) {
+        // Session over — show final summary
+        scoreWordEl.textContent = 'Done';
+        scoreProgressEl.textContent = totalWords > 0 ? `${attempted} / ${totalWords}` : `${attempted}`;
+      } else if (isReviewPhase) {
+        scoreWordEl.textContent = 'Review';
+        scoreProgressEl.textContent = `${reviewCorrect} / ${scoreIncorrect}` ;
+      } else {
+        // Derive round from actual outcomes: current round = attempts so far + 1
+        const round = totalWords > 0 ? Math.min(attempted + 1, totalWords) : attempted + 1;
+        scoreWordEl.textContent = `#${round}`;
+        scoreProgressEl.textContent = totalWords > 0 ? `${attempted} / ${totalWords}` : '-';
+      }
       scoreCorrectEl.textContent = scoreCorrect;
       scoreIncorrectEl.textContent = scoreIncorrect;
-      scoreProgressEl.textContent = totalWords > 0 ? `${attempted} / ${totalWords}` : '-';
     }
 
     // ===================== Score parsing from bot text =====================
@@ -510,7 +522,8 @@ registerProcessor('capture-processor', CaptureProcessor);
           /\bawesome\b/i.test(text) ||
           /\bexcellent\b/i.test(text)) {
         scoreCorrect++;
-        console.log('[Score] CORRECT detected! total:', scoreCorrect);
+        if (isReviewPhase) reviewCorrect++;
+        console.log('[Score] CORRECT detected! total:', scoreCorrect, isReviewPhase ? 'review:' + reviewCorrect : '');
         updateScoreUI();
       } else if (/\bincorrect\b/i.test(text) ||
                  /\bnot\s+(quite|right|correct)\b/i.test(text) ||
@@ -526,6 +539,24 @@ registerProcessor('capture-processor', CaptureProcessor);
         updateScoreUI();
       } else {
         console.log('[Score] No correct/incorrect pattern matched in:', text.substring(0, 100));
+      }
+
+      // Detect review phase
+      if (/\breview\s+the\s+words\s+you\s+missed\b/i.test(text) ||
+          /\breview\s+round\b/i.test(text) ||
+          /\blet'?s\s+review\b/i.test(text)) {
+        isReviewPhase = true;
+        reviewCorrect = 0;
+        console.log('[Score] REVIEW PHASE started');
+        updateScoreUI();
+      }
+
+      // Detect practice complete
+      if (/\b(great|good)\s+practice\s+today\b/i.test(text) ||
+          /\bkeep\s+it\s+up\b/i.test(text)) {
+        practiceComplete = true;
+        console.log('[Score] PRACTICE COMPLETE');
+        updateScoreUI();
       }
 
       // Detect current word — match many announcement patterns
@@ -729,6 +760,9 @@ registerProcessor('capture-processor', CaptureProcessor);
         scoreCorrect = 0;
         scoreIncorrect = 0;
         currentWord = '-';
+        isReviewPhase = false;
+        reviewCorrect = 0;
+        practiceComplete = false;
         updateScoreUI();
 
         // Open WebSocket

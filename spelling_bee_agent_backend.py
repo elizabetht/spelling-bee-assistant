@@ -164,6 +164,62 @@ if PIPECAT_AVAILABLE:
                 await self.push_frame(msg, direction)
             await self.push_frame(frame, direction)
 
+    class IncorrectWordTracker(FrameProcessor):
+        """Track incorrect words in Redis by monitoring LLM text output.
+
+        Watches TextFrames for "Not quite" (incorrect) responses and records
+        the PREVIOUS word (the one being quizzed) to a Redis set.
+        """
+
+        _NOT_QUITE_RE = re.compile(r'\bnot\s+quite\b', re.IGNORECASE)
+        _WORD_RE = re.compile(
+            r'(?:first|next|new|your)\s+(?:next\s+)?word\s+is[:\s]+["\']?(\w+)["\']?',
+            re.IGNORECASE,
+        )
+
+        def __init__(self, session_id: str, session_words: List[str]):
+            super().__init__()
+            self._session_id = session_id
+            self._session_words = [w.lower() for w in session_words]
+            self._redis_key = f"spellingbee:session:{session_id}:incorrect"
+            self._current_word: Optional[str] = None
+            self._buffer = ""
+            self._marked_incorrect = False  # prevent double-saving same word
+
+        def _redis_add_incorrect(self, word: str):
+            try:
+                redis_client.sadd(self._redis_key, word.lower())
+                redis_client.expire(self._redis_key, 60 * 60 * 24)
+                logger.info("Incorrect word '%s' saved to Redis for session %s", word, self._session_id)
+            except Exception as e:
+                logger.warning("Failed to save incorrect word to Redis: %s", e)
+
+        async def process_frame(self, frame: Frame, direction: FrameDirection):
+            await super().process_frame(frame, direction)
+
+            if isinstance(frame, TextFrame) and frame.text:
+                self._buffer += frame.text
+
+                # Detect incorrect judgment BEFORE extracting next word.
+                # "Not quite" means the CURRENT word was wrong.
+                if self._NOT_QUITE_RE.search(self._buffer) and self._current_word and not self._marked_incorrect:
+                    self._redis_add_incorrect(self._current_word)
+                    self._marked_incorrect = True
+
+                # Track which word is announced (updates current word for next round)
+                m = self._WORD_RE.search(self._buffer)
+                if m:
+                    new_word = m.group(1).lower()
+                    if new_word != self._current_word:
+                        self._current_word = new_word
+                        self._marked_incorrect = False  # reset for new word
+
+            elif isinstance(frame, BotStoppedSpeakingFrame):
+                # Reset buffer between bot utterances
+                self._buffer = ""
+
+            await self.push_frame(frame, direction)
+
 
 def get_session_words(session_id: str) -> List[str]:
     if session_id in session_wordlists:
@@ -182,6 +238,23 @@ def get_session_words(session_id: str) -> List[str]:
 def set_session_words(session_id: str, words: List[str]) -> None:
     session_wordlists[session_id] = words
     redis_client.set(f"spellingbee:session:{session_id}:words", json.dumps(words), ex=60 * 60 * 24)
+
+
+def get_session_incorrect_words(session_id: str) -> List[str]:
+    """Retrieve the set of incorrect words for a session from Redis."""
+    try:
+        members = redis_client.smembers(f"spellingbee:session:{session_id}:incorrect")
+        return [m.decode("utf-8") if isinstance(m, bytes) else m for m in members]
+    except Exception:
+        return []
+
+
+def clear_session_incorrect_words(session_id: str) -> None:
+    """Clear incorrect words after a review round."""
+    try:
+        redis_client.delete(f"spellingbee:session:{session_id}:incorrect")
+    except Exception:
+        pass
 
 
 def _load_guardrails_policy_text() -> str:
@@ -380,6 +453,13 @@ async def sample_words(count: int = 5):
     }
 
 
+@app.get("/session/{session_id}/incorrect")
+async def get_incorrect(session_id: str):
+    """Return the list of words the child got wrong during the session."""
+    words = get_session_incorrect_words(session_id)
+    return {"session_id": session_id, "incorrect_words": words, "count": len(words)}
+
+
 @app.get("/healthz")
 async def healthz():
     return {"status": "ok", "pipecat_available": PIPECAT_AVAILABLE}
@@ -497,8 +577,16 @@ if PIPECAT_AVAILABLE:
                     "'Correct!' or 'Not quite.' — the child needs feedback.\n"
                     "- On repeat request: 'Your word is [same word].'\n"
                     "- On skip request: 'Your next word is [next word].'\n"
-                    "- After the last word, if correct: 'Correct! All done! Great practice today.'\n"
-                    "- After the last word, if wrong: 'Not quite. All done! Great practice today.'\n\n"
+                    "- After the last word, if correct: 'Correct! All done!'\n"
+                    "- After the last word, if wrong: 'Not quite. All done!'\n"
+                    "- After saying 'All done!' ALWAYS check: if the child got ANY "
+                    "words wrong during this session, say EXACTLY: "
+                    "'Would you like to review the words you missed?'\n"
+                    "- If the child says yes to review, re-quiz ONLY the missed words "
+                    "in the same format. After the review round, say: "
+                    "'Great practice today! Keep it up!'\n"
+                    "- If the child says no to review or got everything correct, say: "
+                    "'Great practice today! Keep it up!'\n\n"
 
                     "STAY ON TOPIC: Only discuss spelling. If off-topic, say: "
                     "'Let us get back to spelling practice.'\n\n"
@@ -519,6 +607,7 @@ if PIPECAT_AVAILABLE:
 
         md_stripper = MarkdownStripper()
         transcript_bridge = TranscriptBridge()
+        incorrect_tracker = IncorrectWordTracker(session_id, session_words)
 
         pipeline = Pipeline(
             [
@@ -527,6 +616,7 @@ if PIPECAT_AVAILABLE:
                 stt_transcript_synchronization,
                 context_aggregator.user(),
                 llm,
+                incorrect_tracker,
                 md_stripper,
                 tts,
                 tts_transcript_synchronization,
