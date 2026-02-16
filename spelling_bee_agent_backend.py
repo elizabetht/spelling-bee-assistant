@@ -40,7 +40,7 @@ except ImportError:
 try:
     from pipecat.audio.vad.silero import SileroVADAnalyzer
     from pipecat.audio.vad.vad_analyzer import VADParams
-    from pipecat.frames.frames import Frame, LLMMessagesFrame, OutputAudioRawFrame, OutputTransportMessageFrame, TextFrame, TTSAudioRawFrame
+    from pipecat.frames.frames import Frame, LLMMessagesFrame, OutputAudioRawFrame, OutputTransportMessageFrame, TextFrame, TTSAudioRawFrame, TTSTextFrame
     from pipecat.pipeline.pipeline import Pipeline
     from pipecat.pipeline.task import PipelineParams, PipelineTask
     from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
@@ -66,6 +66,7 @@ try:
     # Patch: protobuf serializer uses exact type matching, so TTSAudioRawFrame
     # (subclass of OutputAudioRawFrame) gets silently dropped. Register it.
     ProtobufFrameSerializer.SERIALIZABLE_TYPES[TTSAudioRawFrame] = "audio"
+    ProtobufFrameSerializer.SERIALIZABLE_TYPES[TTSTextFrame] = "text"
 
     PIPECAT_AVAILABLE = True
 except ImportError:
@@ -75,8 +76,11 @@ except ImportError:
 # from nemoguardrails import Rails
 
 import logging
+from loguru import logger as _loguru_logger
 
 logging.getLogger("pipecat.serializers.protobuf").setLevel(logging.ERROR)
+# Pipecat uses loguru; filter out noisy "not serializable" warnings
+_loguru_logger.disable("pipecat.serializers.protobuf")
 logger = logging.getLogger(__name__)
 
 load_dotenv()
@@ -134,7 +138,7 @@ if PIPECAT_AVAILABLE:
                 cleaned = self._MARKDOWN_RE.sub('', frame.text)
                 frame.text = cleaned
                 # Send cleaned text to client via OutputTransportMessageFrame
-                msg = json.dumps({"type": "tts_update", "text": cleaned})
+                msg = {"type": "tts_update", "text": cleaned}
                 await self.push_frame(OutputTransportMessageFrame(message=msg), direction)
             await self.push_frame(frame, direction)
 
