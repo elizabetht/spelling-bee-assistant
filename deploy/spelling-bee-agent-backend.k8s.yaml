@@ -32,10 +32,6 @@ spec:
               value: "true"
             - name: NEMO_GUARDRAILS_CONFIG_PATH
               value: "/app/guardrails"
-            - name: VLLM_LLM_BASE
-              value: "http://vllm-nemotron-nano-30b:5567/v1"
-            - name: VLLM_LLM_MODEL
-              value: "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8"
             - name: ELEVENLABS_API_KEY
               valueFrom:
                 secretKeyRef:

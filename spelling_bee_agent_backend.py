@@ -118,8 +118,6 @@ session_progress = {}   # session_id: {current, incorrect, skipped}
 
 VLLM_VL_BASE = os.getenv("VLLM_VL_BASE", "http://vllm-nemotron-nano-vl-8b:5566/v1")
 VLLM_VL_MODEL = os.getenv("VLLM_VL_MODEL", "nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-FP8")
-VLLM_LLM_BASE = os.getenv("VLLM_LLM_BASE", "http://vllm-nemotron-nano-30b:5567/v1")
-VLLM_LLM_MODEL = os.getenv("VLLM_LLM_MODEL", "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8")
 NEMO_GUARDRAILS_CONFIG_PATH = os.getenv("NEMO_GUARDRAILS_CONFIG_PATH", "./guardrails")
 ENABLE_NEMO_GUARDRAILS = os.getenv("ENABLE_NEMO_GUARDRAILS", "true").lower() == "true"
 
@@ -129,84 +127,14 @@ ENABLE_NEMO_GUARDRAILS = os.getenv("ENABLE_NEMO_GUARDRAILS", "true").lower() == 
 if not os.getenv("OPENAI_API_KEY"):
     os.environ["OPENAI_API_KEY"] = "not-needed"
 if not os.getenv("OPENAI_BASE_URL"):
-    _guardrails_llm_base = os.getenv("NVIDIA_LLM_URL", VLLM_LLM_BASE)
-    os.environ["OPENAI_BASE_URL"] = _guardrails_llm_base
+    os.environ["OPENAI_BASE_URL"] = os.getenv("NVIDIA_LLM_URL", VLLM_VL_BASE)
 
 ACE_RUNNER = None
 NEMO_RAILS = None
 NEMO_POLICY_TEXT = ""
 
 
-def _check_model_health(base_url: str) -> bool:
-    """Check if a vLLM model endpoint is reachable *and* generating coherent text.
 
-    A simple /models ping is not enough — the model can be loaded but produce
-    garbage (e.g. due to quantization issues or insufficient GPU memory).  We
-    send a trivial generation request and verify the output looks like real text.
-    """
-    try:
-        # Quick reachability check first
-        req = request.Request(f"{base_url}/models", method="GET")
-        with request.urlopen(req, timeout=3) as resp:
-            models_data = json.loads(resp.read())
-            model_id = models_data["data"][0]["id"]
-
-        # Sanity-check generation: ask for a single short reply
-        payload = json.dumps({
-            "model": model_id,
-            "messages": [{"role": "user", "content": "Say hello."}],
-            "max_tokens": 20,
-            "temperature": 0.0,
-        }).encode()
-        req = request.Request(
-            f"{base_url}/chat/completions",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with request.urlopen(req, timeout=15) as resp:
-            result = json.loads(resp.read())
-            content = result["choices"][0]["message"]["content"].strip()
-            finish = result["choices"][0].get("finish_reason", "")
-            # Reject if output is empty, all punctuation/whitespace, or hit
-            # the token limit without stopping (runaway generation).
-            if not content or not any(c.isalpha() for c in content):
-                logger.warning("Model at %s produced non-text output: %r", base_url, content)
-                return False
-            if finish == "length":
-                logger.warning("Model at %s did not stop naturally (finish_reason=length)", base_url)
-                return False
-            return True
-    except Exception as exc:
-        logger.debug("Health check failed for %s: %s", base_url, exc)
-        return False
-
-
-def _resolve_llm_endpoint() -> tuple:
-    """Resolve which LLM endpoint to use, with fallback from 30B to VL model.
-
-    Priority:
-    1. Explicit NVIDIA_LLM_URL / NVIDIA_LLM_MODEL env overrides (no fallback).
-    2. VLLM_LLM_BASE (30B model) if healthy.
-    3. VLLM_VL_BASE (VL model) as fallback.
-    """
-    env_url = os.getenv("NVIDIA_LLM_URL")
-    env_model = os.getenv("NVIDIA_LLM_MODEL")
-    if env_url or env_model:
-        resolved = (env_url or VLLM_LLM_BASE, env_model or VLLM_LLM_MODEL)
-        logger.info("LLM endpoint resolved via env override: %s / %s", *resolved)
-        return resolved
-
-    if _check_model_health(VLLM_LLM_BASE):
-        logger.info("LLM endpoint resolved to 30B model: %s / %s", VLLM_LLM_BASE, VLLM_LLM_MODEL)
-        return (VLLM_LLM_BASE, VLLM_LLM_MODEL)
-
-    logger.warning(
-        "30B LLM at %s is unreachable; falling back to VL model at %s",
-        VLLM_LLM_BASE,
-        VLLM_VL_BASE,
-    )
-    return (VLLM_VL_BASE, VLLM_VL_MODEL)
 
 
 class _NoOpMemory:
@@ -801,12 +729,12 @@ if PIPECAT_AVAILABLE:
             ),
         )
 
-        llm_base, llm_model = _resolve_llm_endpoint()
+        llm_base = os.getenv("NVIDIA_LLM_URL", VLLM_VL_BASE)
+        llm_model = os.getenv("NVIDIA_LLM_MODEL", VLLM_VL_MODEL)
         llm = NvidiaLLMService(
             api_key="not-needed",
             base_url=llm_base,
             model=llm_model,
-            params=NvidiaLLMService.InputParams(max_completion_tokens=200),
         )
 
         stt = ElevenLabsRealtimeSTTService(
