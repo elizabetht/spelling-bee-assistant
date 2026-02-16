@@ -181,7 +181,14 @@ def initialize_nemo_guardrails() -> None:
         raw_yaml = (config_path / "config.yml").read_text()
         resolved_model = os.getenv("NVIDIA_LLM_MODEL", VLLM_VL_MODEL)
         raw_yaml = raw_yaml.replace("__NVIDIA_LLM_MODEL__", resolved_model)
-        rails_config = RailsConfig.from_content(yaml_content=raw_yaml, config_path=str(config_path))
+        # Load Colang files from the config directory
+        colang_content = ""
+        for co_file in sorted(config_path.glob("*.co")):
+            colang_content += co_file.read_text() + "\n"
+        rails_config = RailsConfig.from_content(
+            yaml_content=raw_yaml,
+            colang_content=colang_content,
+        )
         NEMO_RAILS = LLMRails(rails_config)
     except Exception as e:
         logger.warning("NeMo Guardrails init failed: %s", e)
