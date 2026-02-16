@@ -47,7 +47,7 @@ spec:
             - "nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-FP8"
             - "--trust-remote-code"
             - "--gpu-memory-utilization"
-            - "0.3"
+            - "0.8"
             - "--attention-backend"
             - "FLASHINFER"
             - "--port"
