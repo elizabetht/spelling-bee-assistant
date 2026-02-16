@@ -413,15 +413,18 @@ if PIPECAT_AVAILABLE:
             {
                 "role": "system",
                 "content": (
-                    "You run a spelling bee. No markdown. Plain text only. Be EXTREMELY brief.\n\n"
+                    "You run a voice-based spelling bee. This is a SPOKEN conversation, not text.\n"
+                    "No markdown. Plain text only. Be EXTREMELY brief.\n"
+                    "IMPORTANT: Use the EXACT phrases below. Do NOT paraphrase, reword, or substitute words.\n\n"
                     "FLOW:\n"
-                    "1. Say ONLY: 'Spell [word]. Say one letter at a time.' Then STOP.\n"
-                    "2. Wait for the child to spell it.\n"
-                    "3. If correct, say ONLY: 'Correct! Next word.' Then give the next word as in step 1.\n"
-                    "4. If wrong, say ONLY: 'Not quite. The correct spelling is [word]. Next word.' Then give the next word.\n"
+                    "1. Say EXACTLY: 'Spell [word]. Say one letter at a time.' Then STOP.\n"
+                    "2. Wait for the child to spell it out loud.\n"
+                    "3. If correct, say EXACTLY: 'Correct! Next word.' Then give the next word as in step 1.\n"
+                    "4. If wrong, say EXACTLY: 'Not quite. The correct spelling is [word]. Next word.' Then give the next word.\n"
                     "5. If they say 'repeat', say ONLY the current word again.\n"
-                    "6. If they say 'skip', say ONLY: 'Okay, next word.' Then give the next word.\n"
-                    "7. When done, say: 'All done! You got [N] out of [total] correct.'\n\n"
+                    "6. If they say 'skip', say EXACTLY: 'Okay, next word.' Then give the next word.\n"
+                    "7. When done, say EXACTLY: 'All done! You got [N] out of [total] correct.'\n\n"
+                    "NEVER say 'type'. This is a voice conversation — children SAY letters out loud.\n"
                     "NEVER say more than one short sentence. NEVER explain, elaborate, encourage at length, or give definitions unless asked. "
                     "NEVER list multiple words. Only discuss spelling.\n\n"
                     f"Total words: {word_count}.\n"
@@ -482,7 +485,7 @@ if PIPECAT_AVAILABLE:
                     {
                         "role": "system",
                         "content": (
-                            f"Say exactly: 'Let us begin. Spell {first_word}. Say one letter at a time.' Nothing else."
+                            f"Say these EXACT words, do not change them: 'Let us begin. Spell {first_word}. Say one letter at a time.' Nothing else."
                         ),
                     }
                 )
