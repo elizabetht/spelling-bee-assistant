@@ -345,8 +345,8 @@
 
       <div class="score-bar" id="scoreBar">
         <div class="score-item">
-          <span class="score-label">Word</span>
-          <span class="score-value word" id="scoreWord">-</span>
+          <span class="score-label">Round</span>
+          <span class="score-value word" id="scoreWord">#0</span>
         </div>
         <div class="score-item">
           <span class="score-label">Correct</span>
@@ -460,6 +460,7 @@ registerProcessor('capture-processor', CaptureProcessor);
     let scoreCorrect = 0;
     let scoreIncorrect = 0;
     let currentWord = '-';
+    let wordNumber = 0;
 
     // ===================== DOM refs =====================
     const stepUpload = document.getElementById('stepUpload');
@@ -481,7 +482,7 @@ registerProcessor('capture-processor', CaptureProcessor);
     const scoreProgressEl = document.getElementById('scoreProgress');
 
     function updateScoreUI() {
-      scoreWordEl.textContent = currentWord;
+      scoreWordEl.textContent = wordNumber > 0 ? `#${wordNumber}` : '#0';
       scoreCorrectEl.textContent = scoreCorrect;
       scoreIncorrectEl.textContent = scoreIncorrect;
       const attempted = scoreCorrect + scoreIncorrect;
@@ -491,9 +492,10 @@ registerProcessor('capture-processor', CaptureProcessor);
     // ===================== Score parsing from bot text =====================
     function parseScoreFromText(text) {
       if (!text) return;
+      console.log('[Score] parseScoreFromText called with:', JSON.stringify(text));
 
       // Detect correct
-      if (/\bcorrect\b/i.test(text) && !/\bincorrect\b/i.test(text) && !/\bnot\s+(quite\s+)?correct\b/i.test(text) ||
+      if ((/\bcorrect\b/i.test(text) && !/\bincorrect\b/i.test(text) && !/\bnot\s+(quite\s+)?correct\b/i.test(text)) ||
           /\bthat'?s\s+(right|correct)\b/i.test(text) ||
           /\bwell\s+done\b/i.test(text) ||
           /\bgreat\s+(job|spelling|work)\b/i.test(text) ||
@@ -504,6 +506,7 @@ registerProcessor('capture-processor', CaptureProcessor);
           /\bawesome\b/i.test(text) ||
           /\bexcellent\b/i.test(text)) {
         scoreCorrect++;
+        console.log('[Score] CORRECT detected! total:', scoreCorrect);
         updateScoreUI();
       } else if (/\bincorrect\b/i.test(text) ||
                  /\bnot\s+(quite|right|correct)\b/i.test(text) ||
@@ -515,7 +518,10 @@ registerProcessor('capture-processor', CaptureProcessor);
                  /\bclose,?\s+but\b/i.test(text) ||
                  /\balmost\b/i.test(text)) {
         scoreIncorrect++;
+        console.log('[Score] INCORRECT detected! total:', scoreIncorrect);
         updateScoreUI();
+      } else {
+        console.log('[Score] No correct/incorrect pattern matched in:', text.substring(0, 100));
       }
 
       // Detect current word — match many announcement patterns
@@ -532,6 +538,8 @@ registerProcessor('capture-processor', CaptureProcessor);
         const m = text.match(pat);
         if (m && m[1] && m[1].length > 1) {
           currentWord = m[1].toLowerCase();
+          wordNumber++;
+          console.log('[Score] New word detected:', currentWord, 'round:', wordNumber);
           updateScoreUI();
           break;
         }
@@ -705,6 +713,7 @@ registerProcessor('capture-processor', CaptureProcessor);
         scoreCorrect = 0;
         scoreIncorrect = 0;
         currentWord = '-';
+        wordNumber = 0;
         updateScoreUI();
 
         // Open WebSocket
@@ -984,6 +993,7 @@ registerProcessor('capture-processor', CaptureProcessor);
         statusLabel.textContent = 'Tutor is speaking...';
 
         const newText = msg.text || msg.data || '';
+        console.log('[TTS] tts_update text:', JSON.stringify(newText), 'bufLen:', botUtteranceBuffer.length);
         botUtteranceBuffer = botUtteranceBuffer.slice(0, botSegmentStart) + newText;
         resetBotUtteranceTimer();
       } else if (type === 'tts_end') {
