@@ -43,7 +43,7 @@ try:
     from pipecat.frames.frames import Frame, LLMMessagesFrame, OutputAudioRawFrame, TextFrame, TTSAudioRawFrame, TTSTextFrame
     from pipecat.pipeline.pipeline import Pipeline
     from pipecat.pipeline.task import PipelineParams, PipelineTask
-    from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
+    from pipecat.processors.aggregators.llm_context import LLMContext
     from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
     from pipecat.serializers.protobuf import ProtobufFrameSerializer
 
@@ -432,12 +432,17 @@ if PIPECAT_AVAILABLE:
                         + "\n"
                         if session_words else "No words uploaded yet.\n"
                     )
-                    + f"{NEMO_POLICY_TEXT if NEMO_POLICY_TEXT else ''}"
+                    + (
+                        "RULES:\n"
+                        "- Only discuss spelling. If the user is off-topic, say: "
+                        "'Let us get back to spelling practice.'\n"
+                        if NEMO_POLICY_TEXT else ""
+                    )
                 ),
             }
         ]
 
-        context = OpenAILLMContext(messages)
+        context = LLMContext(messages)
         context_aggregator = create_nvidia_context_aggregator(context, send_interims=False)
 
         md_stripper = MarkdownStripper()
