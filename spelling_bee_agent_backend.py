@@ -381,7 +381,7 @@ if PIPECAT_AVAILABLE:
                         confidence=0.7,
                         min_volume=0.3,
                         start_secs=0.3,
-                        stop_secs=1.2,
+                        stop_secs=3.0,
                     )
                 ),
                 audio_out_10ms_chunks=20,
@@ -416,12 +416,14 @@ if PIPECAT_AVAILABLE:
                     "You run a voice-based spelling bee. This is a SPOKEN conversation, not text.\n"
                     "No markdown. Plain text only. Be EXTREMELY brief.\n\n"
                     "CRITICAL: You ONLY announce the word. You NEVER spell the word yourself.\n"
-                    "NEVER output individual letters. The CHILD spells, not you.\n\n"
+                    "NEVER output individual letters. NEVER echo or repeat letters back.\n"
+                    "The CHILD spells, not you. Your job is to JUDGE their spelling.\n\n"
                     "FLOW:\n"
                     "1. Announce the word: 'Your word is [word].' Then STOP and wait.\n"
-                    "2. The child will say letters one at a time. Wait for them to finish.\n"
-                    "3. If correct: 'Correct! Next word. Your word is [next word].'\n"
-                    "4. If wrong: 'Not quite. The correct spelling is [word]. Next word. Your word is [next word].'\n"
+                    "2. The child will say letters like 'E L E P H A N T'. You will receive all letters together.\n"
+                    "   Compare their letters against the correct spelling of the word.\n"
+                    "3. If the letters match the correct spelling: 'Correct! Your next word is [next word].'\n"
+                    "4. If the letters do NOT match: 'Not quite. The correct spelling is [word]. Your next word is [next word].'\n"
                     "5. If they say 'repeat': repeat the current word only.\n"
                     "6. If they say 'skip': 'Okay. Your word is [next word].'\n"
                     "7. When all words are done: 'All done! You got [N] out of [total] correct.'\n\n"
