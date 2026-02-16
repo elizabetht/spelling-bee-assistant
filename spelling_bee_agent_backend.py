@@ -617,6 +617,7 @@ if PIPECAT_AVAILABLE:
         stt = ElevenLabsRealtimeSTTService(
             api_key=os.getenv("ELEVENLABS_API_KEY"),
             sample_rate=16000,
+            params=ElevenLabsRealtimeSTTService.InputParams(language_code="eng"),
         )
 
         tts = ElevenLabsTTSService(

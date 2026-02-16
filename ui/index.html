@@ -776,6 +776,9 @@ registerProcessor('capture-processor', CaptureProcessor);
 
         workletNode.port.onmessage = (e) => {
           if (e.data.type === 'audio' && ws && ws.readyState === WebSocket.OPEN) {
+            // Suppress mic input while bot is speaking to prevent audio feedback
+            // (bot's TTS gets picked up by mic → STT transcribes it → LLM responds to itself)
+            if (isBotSpeaking) return;
             const pcmBuf = new Uint8Array(e.data.pcm);
             const protoBuf = encodeAudioFrame(pcmBuf, 16000, 1);
             ws.send(protoBuf);
