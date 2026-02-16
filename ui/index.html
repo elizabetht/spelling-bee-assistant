@@ -543,6 +543,17 @@ registerProcessor('capture-processor', CaptureProcessor);
         if (m && m[1] && m[1].length > 1) {
           const detected = m[1].toLowerCase();
           if (detected !== currentWord) {
+            // If a new word is announced but no correct/incorrect was detected
+            // in this buffer, and we had a previous word (child was spelling),
+            // infer the result as correct (the LLM moved on without explicit feedback).
+            const hadJudgment = /\bcorrect\b/i.test(text) || /\bnot\s+quite\b/i.test(text) ||
+                                /\bincorrect\b/i.test(text) || /\boops\b/i.test(text) ||
+                                /\bclose,?\s+but\b/i.test(text) || /\balmost\b/i.test(text);
+            if (!hadJudgment && currentWord !== '-') {
+              scoreCorrect++;
+              console.log('[Score] Implicit CORRECT (no judgment before new word). total:', scoreCorrect);
+              updateScoreUI();
+            }
             currentWord = detected;
             console.log('[Score] New word detected:', currentWord);
           }
