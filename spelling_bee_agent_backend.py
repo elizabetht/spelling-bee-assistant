@@ -401,6 +401,10 @@ if PIPECAT_AVAILABLE:
         session_id = pipeline_metadata.stream_id
         session_words = get_session_words(session_id) if session_id else []
         word_count = len(session_words)
+        progress = session_progress.get(session_id, {})
+        current_idx = progress.get("current", 0)
+        is_resuming = current_idx > 0 and current_idx < word_count
+        current_word = session_words[current_idx] if session_words and current_idx < word_count else None
         first_word = session_words[0] if session_words else None
 
         transport = ACETransport(
@@ -531,13 +535,38 @@ if PIPECAT_AVAILABLE:
         @transport.event_handler("on_client_connected")
         async def on_client_connected(transport, client):
             del transport, client
-            if session_words:
-                # Seed the conversation so the LLM continues naturally.
-                # Use a single user message; the LLM will respond with the first word.
+            if session_words and is_resuming:
+                # Continuing a session — skip to the current word
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": "Continue the spelling bee.",
+                    }
+                )
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": (
+                            f"Welcome back! Let's continue our spelling bee practice. "
+                            f"Your word is {current_word}."
+                        ),
+                    }
+                )
+            elif session_words:
+                # New session — greet and present first word
                 messages.append(
                     {
                         "role": "user",
                         "content": "Start the spelling bee.",
+                    }
+                )
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": (
+                            f"Hello! Welcome to spelling bee practice. "
+                            f"Your first word is {first_word}."
+                        ),
                     }
                 )
             else:

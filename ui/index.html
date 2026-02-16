@@ -908,8 +908,10 @@ registerProcessor('capture-processor', CaptureProcessor);
             currentBotEntry.querySelector('.transcript-text').classList.remove('interim');
             parseScoreFromText(botUtteranceBuffer);
             botUtteranceBuffer = '';
+            botSegmentStart = 0;
             currentBotEntry = null;
             isBotSpeaking = false;
+            if (botUtteranceTimer) { clearTimeout(botUtteranceTimer); botUtteranceTimer = null; }
             if (!isMuted) {
               micIndicator.className = 'mic-indicator listening';
               statusLabel.textContent = 'Listening...';
@@ -940,9 +942,10 @@ registerProcessor('capture-processor', CaptureProcessor);
 
     // Buffer to accumulate full bot utterance for score parsing
     let botUtteranceBuffer = '';
+    let botSegmentStart = 0;   // index in buffer where current TTS segment begins
     let botUtteranceTimer = null;
 
-    // Parse bot utterance after 1.5s of no new text (bot finished speaking)
+    // Parse bot utterance after 2s of no new TTS activity (bot finished speaking)
     function resetBotUtteranceTimer() {
       if (botUtteranceTimer) clearTimeout(botUtteranceTimer);
       botUtteranceTimer = setTimeout(() => {
@@ -953,13 +956,14 @@ registerProcessor('capture-processor', CaptureProcessor);
             currentBotEntry = null;
           }
           botUtteranceBuffer = '';
+          botSegmentStart = 0;
           isBotSpeaking = false;
           if (!isMuted) {
             micIndicator.className = 'mic-indicator listening';
             statusLabel.textContent = 'Listening...';
           }
         }
-      }, 1500);
+      }, 2000);
     }
 
     function handleTranscriptMessage(msg) {
@@ -979,7 +983,7 @@ registerProcessor('capture-processor', CaptureProcessor);
         updateTranscriptText(currentUserEntry, msg.text || msg.data || '', false);
         currentUserEntry = null;
       } else if (type === 'tts_update') {
-        // Bot speaking text
+        // Bot speaking text — accumulate across TTS segments
         isBotSpeaking = true;
         micIndicator.className = 'mic-indicator bot-speaking';
         statusLabel.textContent = 'Tutor is speaking...';
@@ -987,26 +991,23 @@ registerProcessor('capture-processor', CaptureProcessor);
         if (!currentBotEntry) {
           currentBotEntry = addTranscriptEntry('bot');
           botUtteranceBuffer = '';
+          botSegmentStart = 0;
         }
-        // BotTranscriptSynchronization sends accumulated text, not deltas — replace buffer
+        // Within a segment, tts_update is cumulative — replace from segmentStart.
+        // Across segments, segmentStart advances so previous text is preserved.
         const newText = msg.text || msg.data || '';
-        botUtteranceBuffer = newText;
+        botUtteranceBuffer = botUtteranceBuffer.slice(0, botSegmentStart) + newText;
         updateTranscriptText(currentBotEntry, botUtteranceBuffer, true);
+        resetBotUtteranceTimer();
       } else if (type === 'tts_end') {
-        // Bot done speaking — parse score from full utterance
-        if (currentBotEntry) {
-          const textEl = currentBotEntry.querySelector('.transcript-text');
-          textEl.classList.remove('interim');
-          currentBotEntry = null;
+        // One TTS segment finished — advance segment boundary but keep accumulating.
+        // Add a space separator, then mark where the next segment starts.
+        if (botUtteranceBuffer && !botUtteranceBuffer.endsWith(' ')) {
+          botUtteranceBuffer += ' ';
         }
-        parseScoreFromText(botUtteranceBuffer);
-        botUtteranceBuffer = '';
-
-        isBotSpeaking = false;
-        if (!isMuted) {
-          micIndicator.className = 'mic-indicator listening';
-          statusLabel.textContent = 'Listening...';
-        }
+        botSegmentStart = botUtteranceBuffer.length;
+        // Restart timer — if no more segments arrive, timer will finalize.
+        resetBotUtteranceTimer();
       }
     }
 
