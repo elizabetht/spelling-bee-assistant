@@ -776,6 +776,11 @@ if PIPECAT_AVAILABLE:
             api_key="not-needed",
             base_url=llm_base,
             model=llm_model,
+            params=NvidiaLLMService.InputParams(
+                max_tokens=80,
+                temperature=0.1,
+                extra={"stop": ["\n", "Nouns:", "Verbs:", "Adjectives:", "Anagrams:"]},
+            ),
         )
 
         stt = ElevenLabsRealtimeSTTService(
