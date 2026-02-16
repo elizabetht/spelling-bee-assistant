@@ -123,19 +123,62 @@ VLLM_LLM_MODEL = os.getenv("VLLM_LLM_MODEL", "nvidia/NVIDIA-Nemotron-3-Nano-30B-
 NEMO_GUARDRAILS_CONFIG_PATH = os.getenv("NEMO_GUARDRAILS_CONFIG_PATH", "./guardrails")
 ENABLE_NEMO_GUARDRAILS = os.getenv("ENABLE_NEMO_GUARDRAILS", "true").lower() == "true"
 
+# NeMo Guardrails uses the OpenAI provider to talk to vLLM's OpenAI-compatible
+# API.  Set OPENAI_API_KEY (dummy) and OPENAI_BASE_URL so the LangChain OpenAI
+# client inside NeMo can connect to the self-hosted vLLM endpoint.
+if not os.getenv("OPENAI_API_KEY"):
+    os.environ["OPENAI_API_KEY"] = "not-needed"
+if not os.getenv("OPENAI_BASE_URL"):
+    _guardrails_llm_base = os.getenv("NVIDIA_LLM_URL", VLLM_LLM_BASE)
+    os.environ["OPENAI_BASE_URL"] = _guardrails_llm_base
+
 ACE_RUNNER = None
 NEMO_RAILS = None
 NEMO_POLICY_TEXT = ""
 
 
 def _check_model_health(base_url: str) -> bool:
-    """Check if a vLLM model endpoint is reachable via its /models endpoint."""
+    """Check if a vLLM model endpoint is reachable *and* generating coherent text.
+
+    A simple /models ping is not enough — the model can be loaded but produce
+    garbage (e.g. due to quantization issues or insufficient GPU memory).  We
+    send a trivial generation request and verify the output looks like real text.
+    """
     try:
-        url = f"{base_url}/models"
-        req = request.Request(url, method="GET")
-        with request.urlopen(req, timeout=3):
+        # Quick reachability check first
+        req = request.Request(f"{base_url}/models", method="GET")
+        with request.urlopen(req, timeout=3) as resp:
+            models_data = json.loads(resp.read())
+            model_id = models_data["data"][0]["id"]
+
+        # Sanity-check generation: ask for a single short reply
+        payload = json.dumps({
+            "model": model_id,
+            "messages": [{"role": "user", "content": "Say hello."}],
+            "max_tokens": 20,
+            "temperature": 0.0,
+        }).encode()
+        req = request.Request(
+            f"{base_url}/chat/completions",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with request.urlopen(req, timeout=15) as resp:
+            result = json.loads(resp.read())
+            content = result["choices"][0]["message"]["content"].strip()
+            finish = result["choices"][0].get("finish_reason", "")
+            # Reject if output is empty, all punctuation/whitespace, or hit
+            # the token limit without stopping (runaway generation).
+            if not content or not any(c.isalpha() for c in content):
+                logger.warning("Model at %s produced non-text output: %r", base_url, content)
+                return False
+            if finish == "length":
+                logger.warning("Model at %s did not stop naturally (finish_reason=length)", base_url)
+                return False
             return True
-    except Exception:
+    except Exception as exc:
+        logger.debug("Health check failed for %s: %s", base_url, exc)
         return False
 
 
