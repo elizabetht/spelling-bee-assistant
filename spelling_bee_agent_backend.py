@@ -374,8 +374,9 @@ if PIPECAT_AVAILABLE:
                         result_msg = {
                             "role": "system",
                             "content": (
-                                f"SPELLING RESULT: The child spelled '{spelled}'. "
-                                f"Target: '{target}'. Verdict: {verdict}."
+                                f"[INTERNAL — DO NOT READ ALOUD OR RECAP] "
+                                f"Verdict: {verdict}. Just say 'Correct!' or 'Not quite.' "
+                                f"then announce the next word."
                             ),
                         }
                         self._messages.append(result_msg)
@@ -805,10 +806,10 @@ if PIPECAT_AVAILABLE:
                     "child-friendly definition. Never list multiple meanings.\n\n"
 
                     "SPELLING VERIFICATION:\n"
-                    "You will receive SPELLING RESULT system messages with the verdict "
-                    "(CORRECT or INCORRECT). Trust and use these verdicts. "
-                    "Say 'Correct!' or 'Not quite.' accordingly. Do NOT repeat, "
-                    "explain, or comment on the spelling result.\n\n"
+                    "You will receive internal system messages with a verdict. "
+                    "Use the verdict to respond. NEVER reveal, recap, quote, or "
+                    "paraphrase the system message. NEVER show the child's spelling "
+                    "letter by letter. NEVER show a 'recap' or 'summary'.\n\n"
 
                     "RESPONSE FORMAT — MANDATORY (you MUST follow this EXACTLY):\n"
                     "- Say ONLY one of these two patterns and NOTHING ELSE:\n"
@@ -817,7 +818,8 @@ if PIPECAT_AVAILABLE:
                     "- NEVER add ANY additional text, explanation, or commentary.\n"
                     "- NEVER say 'That is correct', 'Great', 'Good job', 'Well done', "
                     "'The spelling is...', 'You spelled...', 'The child spelled...', "
-                    "or ANY variation. ONLY 'Correct!' or 'Not quite.'\n"
+                    "'Here is a recap', or ANY variation. ONLY 'Correct!' or 'Not quite.'\n"
+                    "- NEVER use markdown, newlines, bullet points, or emojis.\n"
                     "- Your ENTIRE response must be ONE short sentence. STOP immediately "
                     "after announcing the next word. Do NOT generate a second sentence.\n"
                     "- NEVER provide example sentences, definitions, or extra commentary "
