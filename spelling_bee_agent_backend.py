@@ -40,7 +40,7 @@ except ImportError:
 try:
     from pipecat.audio.vad.silero import SileroVADAnalyzer
     from pipecat.audio.vad.vad_analyzer import VADParams
-    from pipecat.frames.frames import Frame, LLMMessagesFrame, OutputAudioRawFrame, TextFrame, TTSAudioRawFrame, TTSTextFrame
+    from pipecat.frames.frames import Frame, LLMMessagesFrame, OutputAudioRawFrame, TextFrame, TTSAudioRawFrame
     from pipecat.pipeline.pipeline import Pipeline
     from pipecat.pipeline.task import PipelineParams, PipelineTask
     from pipecat.processors.aggregators.llm_context import LLMContext
@@ -66,7 +66,6 @@ try:
     # Patch: protobuf serializer uses exact type matching, so TTSAudioRawFrame
     # (subclass of OutputAudioRawFrame) gets silently dropped. Register it.
     ProtobufFrameSerializer.SERIALIZABLE_TYPES[TTSAudioRawFrame] = "audio"
-    ProtobufFrameSerializer.SERIALIZABLE_TYPES[TTSTextFrame] = "text"
 
     PIPECAT_AVAILABLE = True
 except ImportError:
