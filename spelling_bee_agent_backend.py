@@ -401,6 +401,7 @@ if PIPECAT_AVAILABLE:
             self._review_injector = review_injector
             self._messages = messages
             self._review_index = 0
+            self._last_verdict_key = None  # (spelled, target) to dedup duplicate ASR finals
 
         def _clean_text(self, text: str) -> str:
             """Strip ASR noise from transcription text."""
@@ -485,6 +486,15 @@ if PIPECAT_AVAILABLE:
                     if target:
                         spelled = letters.upper()
                         target_upper = target.upper()
+
+                        # Dedup: ASR sometimes fires duplicate finals for the same utterance
+                        verdict_key = (spelled, target_upper)
+                        if verdict_key == self._last_verdict_key:
+                            logger.debug("SpellingVerifier: skipping duplicate verdict for %s", spelled)
+                            await self.push_frame(frame, direction)
+                            return
+                        self._last_verdict_key = verdict_key
+
                         verdict = "CORRECT" if spelled == target_upper else "INCORRECT"
 
                         # Determine the next word so the LLM doesn't have to
