@@ -200,6 +200,90 @@ if PIPECAT_AVAILABLE:
                 await self.push_frame(msg, direction)
             await self.push_frame(frame, direction)
 
+    class GuardrailsFilter(FrameProcessor):
+        """Pre-LLM processor that blocks off-topic user messages.
+
+        Uses NeMo Guardrails (NEMO_RAILS) when available. Falls back to a
+        keyword heuristic that detects common off-topic patterns and replaces
+        the user transcription with a redirect message.
+        """
+
+        # Spelling-related keywords that indicate on-topic speech
+        _ON_TOPIC_RE = re.compile(
+            r'\b('
+            r'spell|repeat|sentence|definition|meaning|skip|review|'
+            r'start|continue|next|word|letter|practice|bee|done|'
+            r'correct|wrong|yes|no|ready'
+            r')\b',
+            re.IGNORECASE,
+        )
+        # Single letters or letter sequences (the child is spelling)
+        _LETTERS_RE = re.compile(
+            r'^[A-Za-z](?:\s*[-\s]\s*[A-Za-z])*$'
+        )
+
+        _REDIRECT = "Let's get back to spelling practice."
+
+        def __init__(self, messages: list):
+            super().__init__()
+            self._messages = messages
+
+        def _is_on_topic(self, text: str) -> bool:
+            """Return True if the text is related to spelling practice."""
+            stripped = text.strip()
+            if not stripped:
+                return True
+            # Single letters or letter sequences are always on-topic
+            if self._LETTERS_RE.match(stripped):
+                return True
+            # Short utterances (≤3 words) are likely spelling attempts
+            if len(stripped.split()) <= 3:
+                return True
+            # Check for spelling-related keywords
+            if self._ON_TOPIC_RE.search(stripped):
+                return True
+            return False
+
+        async def _check_guardrails_async(self, text: str) -> Optional[str]:
+            """Run NeMo Guardrails if available. Returns redirect text or None."""
+            if NEMO_RAILS is None:
+                return None
+            try:
+                import asyncio
+                result = await NEMO_RAILS.generate_async(
+                    messages=[{"role": "user", "content": text}]
+                )
+                bot_msg = result.get("content", "") if isinstance(result, dict) else str(result)
+                # NeMo returns a redirect message if off-topic
+                if "spelling" in bot_msg.lower() or "back to" in bot_msg.lower():
+                    return bot_msg
+            except Exception as e:
+                logger.warning("NeMo Guardrails check failed: %s", e)
+            return None
+
+        async def process_frame(self, frame: Frame, direction: FrameDirection):
+            await super().process_frame(frame, direction)
+
+            if isinstance(frame, TranscriptionFrame) and frame.text:
+                text = frame.text.strip()
+
+                # Fast path: check keyword heuristic first
+                if not self._is_on_topic(text):
+                    # Try NeMo Guardrails for a more nuanced check
+                    redirect = await self._check_guardrails_async(text)
+                    if redirect or not self._is_on_topic(text):
+                        logger.info("GuardrailsFilter: blocked off-topic input: %r", text)
+                        self._messages.append({
+                            "role": "system",
+                            "content": (
+                                "[INTERNAL] The child said something off-topic. "
+                                "Respond ONLY with: 'Let's get back to spelling "
+                                "practice.' then re-announce the current word."
+                            ),
+                        })
+
+            await self.push_frame(frame, direction)
+
     class ReviewInjector(FrameProcessor):
         """Pre-LLM processor that injects the review word list before the LLM responds.
 
@@ -262,6 +346,7 @@ if PIPECAT_AVAILABLE:
 
         - Strips ASR noise (parenthetical descriptions, dashes, trailing periods)
         - Parses letter sequences like "J-O-U-R-N-Y" into "JOURNY"
+        - Handles ASR misrecognitions of letter names (e.g., "cue" → Q)
         - Compares to the current target word
         - Injects a SPELLING RESULT system message so the LLM can trust the verdict
         """
@@ -274,6 +359,36 @@ if PIPECAT_AVAILABLE:
         )
         # Broader pattern: split on dash/space and check if all tokens are single letters
         _DASH_SPLIT_RE = re.compile(r'[-\s]+')
+
+        # Common ASR misrecognitions of spoken letter names
+        _LETTER_NAME_MAP = {
+            "ay": "A", "aye": "A", "eh": "A",
+            "bee": "B", "be": "B",
+            "see": "C", "sea": "C", "cee": "C",
+            "dee": "D",
+            "ee": "E",
+            "ef": "F", "eff": "F",
+            "gee": "G",
+            "aitch": "H", "ache": "H", "each": "H",
+            "eye": "I",
+            "jay": "J",
+            "kay": "K", "okay": "K",
+            "el": "L", "elle": "L", "ell": "L",
+            "em": "M",
+            "en": "N",
+            "oh": "O", "owe": "O",
+            "pee": "P",
+            "cue": "Q", "queue": "Q", "que": "Q",
+            "are": "R", "ar": "R",
+            "es": "S", "ess": "S",
+            "tee": "T", "tea": "T",
+            "you": "U", "ewe": "U",
+            "vee": "V",
+            "double you": "W", "double u": "W", "doubleyou": "W",
+            "ex": "X",
+            "why": "Y", "wie": "Y",
+            "zee": "Z", "zed": "Z",
+        }
 
         def __init__(self, session_id: str, session_words: List[str],
                      review_injector: "ReviewInjector", messages: list):
@@ -293,9 +408,21 @@ if PIPECAT_AVAILABLE:
             cleaned = cleaned.rstrip('. ')
             return cleaned.strip()
 
+        def _normalize_token(self, token: str) -> Optional[str]:
+            """Normalize a single token to a letter, handling ASR misrecognitions."""
+            t = token.strip()
+            if len(t) == 1 and t.isalpha():
+                return t.upper()
+            mapped = self._LETTER_NAME_MAP.get(t.lower())
+            return mapped if mapped else None
+
         def _extract_letters(self, text: str) -> Optional[str]:
-            """Extract letter sequence from text like 'J-O-U-R-N-E-Y' or 'J O U R N E Y'."""
-            cleaned = self._clean_text(text).upper()
+            """Extract letter sequence from text like 'J-O-U-R-N-E-Y' or 'J O U R N E Y'.
+
+            Also handles ASR misrecognitions where letters are transcribed as
+            words (e.g., 'cue you eye ee tee el why' → 'QUIETLY').
+            """
+            cleaned = self._clean_text(text)
             if not cleaned:
                 return None
 
@@ -304,9 +431,13 @@ if PIPECAT_AVAILABLE:
             # Filter empty tokens
             tokens = [t for t in tokens if t]
 
-            # Check if all tokens are single letters (the child spelled letter by letter)
-            if len(tokens) >= 2 and all(len(t) == 1 and t.isalpha() for t in tokens):
-                return ''.join(tokens)
+            if len(tokens) < 2:
+                return None
+
+            # Try to normalize each token to a single letter
+            letters = [self._normalize_token(t) for t in tokens]
+            if all(l is not None for l in letters):
+                return ''.join(letters)
 
             return None
 
@@ -906,6 +1037,7 @@ if PIPECAT_AVAILABLE:
         md_stripper = MarkdownStripper()
         transcript_bridge = TranscriptBridge()
         user_transcript_bridge = UserTranscriptBridge()
+        guardrails_filter = GuardrailsFilter(messages)
         review_injector = ReviewInjector(session_id, word_count, messages)
         spelling_verifier = SpellingVerifier(session_id, session_words, review_injector, messages)
         incorrect_tracker = IncorrectWordTracker(session_id, session_words, review_injector, spelling_verifier)
@@ -916,6 +1048,7 @@ if PIPECAT_AVAILABLE:
                 stt,
                 user_transcript_bridge,
                 stt_transcript_synchronization,
+                guardrails_filter,
                 review_injector,
                 spelling_verifier,
                 context_aggregator.user(),
