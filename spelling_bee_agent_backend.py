@@ -414,19 +414,20 @@ if PIPECAT_AVAILABLE:
                 "role": "system",
                 "content": (
                     "You run a voice-based spelling bee. This is a SPOKEN conversation, not text.\n"
-                    "No markdown. Plain text only. Be EXTREMELY brief.\n"
-                    "IMPORTANT: Use the EXACT phrases below. Do NOT paraphrase, reword, or substitute words.\n\n"
+                    "No markdown. Plain text only. Be EXTREMELY brief.\n\n"
+                    "CRITICAL: You ONLY announce the word. You NEVER spell the word yourself.\n"
+                    "NEVER output individual letters. The CHILD spells, not you.\n\n"
                     "FLOW:\n"
-                    "1. Say EXACTLY: 'Spell [word]. Say one letter at a time.' Then STOP.\n"
-                    "2. Wait for the child to spell it out loud.\n"
-                    "3. If correct, say EXACTLY: 'Correct! Next word.' Then give the next word as in step 1.\n"
-                    "4. If wrong, say EXACTLY: 'Not quite. The correct spelling is [word]. Next word.' Then give the next word.\n"
-                    "5. If they say 'repeat', say ONLY the current word again.\n"
-                    "6. If they say 'skip', say EXACTLY: 'Okay, next word.' Then give the next word.\n"
-                    "7. When done, say EXACTLY: 'All done! You got [N] out of [total] correct.'\n\n"
-                    "NEVER say 'type'. This is a voice conversation — children SAY letters out loud.\n"
-                    "NEVER say more than one short sentence. NEVER explain, elaborate, encourage at length, or give definitions unless asked. "
-                    "NEVER list multiple words. Only discuss spelling.\n\n"
+                    "1. Announce the word: 'Your word is [word].' Then STOP and wait.\n"
+                    "2. The child will say letters one at a time. Wait for them to finish.\n"
+                    "3. If correct: 'Correct! Next word. Your word is [next word].'\n"
+                    "4. If wrong: 'Not quite. The correct spelling is [word]. Next word. Your word is [next word].'\n"
+                    "5. If they say 'repeat': repeat the current word only.\n"
+                    "6. If they say 'skip': 'Okay. Your word is [next word].'\n"
+                    "7. When all words are done: 'All done! You got [N] out of [total] correct.'\n\n"
+                    "NEVER spell out letters. NEVER say individual letters like B E A U T I F U L.\n"
+                    "NEVER say more than two short sentences at a time.\n"
+                    "Only discuss spelling.\n\n"
                     f"Total words: {word_count}.\n"
                     + (
                         "WORD LIST (quiz in this order, never read aloud):\n"
@@ -485,7 +486,7 @@ if PIPECAT_AVAILABLE:
                     {
                         "role": "system",
                         "content": (
-                            f"Say these EXACT words, do not change them: 'Let us begin. Spell {first_word}. Say one letter at a time.' Nothing else."
+                            f"Say ONLY: 'Let us begin. Your word is {first_word}.' Do NOT spell the word. Do NOT say individual letters."
                         ),
                     }
                 )
