@@ -169,15 +169,19 @@ if PIPECAT_AVAILABLE:
 
         Watches TextFrames for "Not quite" (incorrect) responses and records
         the PREVIOUS word (the one being quizzed) to a Redis set.
+        When review is triggered, injects the incorrect word list into the
+        LLM conversation context so the bot knows exactly which words to re-quiz.
         """
 
         _NOT_QUITE_RE = re.compile(r'\bnot\s+quite\b', re.IGNORECASE)
+        _ALL_DONE_RE = re.compile(r'\ball\s+done\b', re.IGNORECASE)
+        _REVIEW_RE = re.compile(r'\breview\b', re.IGNORECASE)
         _WORD_RE = re.compile(
             r'(?:first|next|new|your)\s+(?:next\s+)?word\s+is[:\s]+["\']?(\w+)["\']?',
             re.IGNORECASE,
         )
 
-        def __init__(self, session_id: str, session_words: List[str]):
+        def __init__(self, session_id: str, session_words: List[str], messages: list):
             super().__init__()
             self._session_id = session_id
             self._session_words = [w.lower() for w in session_words]
@@ -185,6 +189,8 @@ if PIPECAT_AVAILABLE:
             self._current_word: Optional[str] = None
             self._buffer = ""
             self._marked_incorrect = False  # prevent double-saving same word
+            self._messages = messages  # reference to LLM context messages
+            self._review_injected = False
 
         def _redis_add_incorrect(self, word: str):
             try:
@@ -193,6 +199,27 @@ if PIPECAT_AVAILABLE:
                 logger.info("Incorrect word '%s' saved to Redis for session %s", word, self._session_id)
             except Exception as e:
                 logger.warning("Failed to save incorrect word to Redis: %s", e)
+
+        def _inject_review_words(self):
+            """Inject incorrect words into LLM context so it knows what to re-quiz."""
+            if self._review_injected:
+                return
+            incorrect = get_session_incorrect_words(self._session_id)
+            if not incorrect:
+                return
+            self._review_injected = True
+            review_msg = {
+                "role": "system",
+                "content": (
+                    f"REVIEW MODE: The child wants to review missed words. "
+                    f"Quiz ONLY these {len(incorrect)} words (the ones they got wrong): "
+                    f"{', '.join(incorrect)}. "
+                    f"Do NOT quiz any other words. Use the same format: "
+                    f"'Your first word is [word].' then judge each attempt."
+                ),
+            }
+            self._messages.append(review_msg)
+            logger.info("Injected review words into context: %s", incorrect)
 
         async def process_frame(self, frame: Frame, direction: FrameDirection):
             await super().process_frame(frame, direction)
@@ -213,6 +240,11 @@ if PIPECAT_AVAILABLE:
                     if new_word != self._current_word:
                         self._current_word = new_word
                         self._marked_incorrect = False  # reset for new word
+
+                # Detect review trigger — inject incorrect words into context
+                if (self._ALL_DONE_RE.search(self._buffer) or
+                        self._REVIEW_RE.search(self._buffer)):
+                    self._inject_review_words()
 
             elif isinstance(frame, BotStoppedSpeakingFrame):
                 # Reset buffer between bot utterances
@@ -574,16 +606,16 @@ if PIPECAT_AVAILABLE:
                     "IMPORTANT: Wait for the child to finish spelling before judging. "
                     "A long pause (silence) means they are done.\n\n"
 
-                    "RESPONSE FORMAT — YOU MUST USE THESE EXACT PHRASES:\n"
-                    "- If correct, say EXACTLY: 'Correct! Your next word is [NEXT word in list].'\n"
-                    "- If wrong, say EXACTLY: 'Not quite. Your next word is [NEXT word in list].'\n"
+                    "RESPONSE FORMAT — CRITICAL RULES:\n"
+                    "- STEP 1: ALWAYS judge first. Say 'Correct!' or 'Not quite.'\n"
+                    "- STEP 2: THEN announce the next word.\n"
+                    "- VALID: 'Correct! Your next word is calendar.'\n"
+                    "- VALID: 'Not quite. Your next word is calendar.'\n"
+                    "- INVALID: 'Your next word is calendar.' (MISSING JUDGMENT!)\n"
+                    "- If you forget the judgment, the child gets NO feedback!\n"
                     "- IMPORTANT: Whether correct or wrong, ALWAYS move to the NEXT word "
                     "in the list. NEVER repeat the same word. Missed words will be "
                     "reviewed at the end.\n"
-                    "- EVERY response after the child spells MUST start with either "
-                    "'Correct!' or 'Not quite.' — NEVER skip this judgment.\n"
-                    "- NEVER say just 'Your next word is [word]' without first saying "
-                    "'Correct!' or 'Not quite.' — the child needs feedback.\n"
                     "- On repeat request: 'Your word is [same word].'\n"
                     "- On skip request: 'Your next word is [next word].'\n"
                     "- After the last word, if correct: 'Correct! All done!'\n"
@@ -618,7 +650,7 @@ if PIPECAT_AVAILABLE:
 
         md_stripper = MarkdownStripper()
         transcript_bridge = TranscriptBridge()
-        incorrect_tracker = IncorrectWordTracker(session_id, session_words)
+        incorrect_tracker = IncorrectWordTracker(session_id, session_words, messages)
 
         pipeline = Pipeline(
             [
