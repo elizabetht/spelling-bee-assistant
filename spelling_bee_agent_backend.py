@@ -40,7 +40,7 @@ except ImportError:
 try:
     from pipecat.audio.vad.silero import SileroVADAnalyzer
     from pipecat.audio.vad.vad_analyzer import VADParams
-    from pipecat.frames.frames import Frame, LLMMessagesFrame, OutputAudioRawFrame, OutputTransportMessageFrame, TextFrame, TTSAudioRawFrame, TTSTextFrame
+    from pipecat.frames.frames import Frame, LLMMessagesFrame, OutputAudioRawFrame, TextFrame, TTSAudioRawFrame, TTSTextFrame
     from pipecat.pipeline.pipeline import Pipeline
     from pipecat.pipeline.task import PipelineParams, PipelineTask
     from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
@@ -123,23 +123,14 @@ class _NoOpMemory:
 
 if PIPECAT_AVAILABLE:
     class MarkdownStripper(FrameProcessor):
-        """Strip markdown from text frames and emit bot text as MessageFrame.
-
-        The TTS consumes TextFrames so the client never sees bot text.
-        This processor emits a serializable MessageFrame with tts_update
-        JSON so the client can display transcripts and track score.
-        """
+        """Strip markdown characters from text frames before TTS."""
 
         _MARKDOWN_RE = re.compile(r'[*_~`#]+')
 
         async def process_frame(self, frame: Frame, direction: FrameDirection):
             await super().process_frame(frame, direction)
             if isinstance(frame, TextFrame) and frame.text:
-                cleaned = self._MARKDOWN_RE.sub('', frame.text)
-                frame.text = cleaned
-                # Send cleaned text to client via OutputTransportMessageFrame
-                msg = {"type": "tts_update", "text": cleaned}
-                await self.push_frame(OutputTransportMessageFrame(message=msg), direction)
+                frame.text = self._MARKDOWN_RE.sub('', frame.text)
             await self.push_frame(frame, direction)
 
 
