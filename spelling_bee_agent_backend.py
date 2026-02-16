@@ -129,13 +129,14 @@ if PIPECAT_AVAILABLE:
         _MARKDOWN_RE = re.compile(r'[*_~`#]+')
 
         async def process_frame(self, frame: Frame, direction: FrameDirection):
+            await super().process_frame(frame, direction)
             if isinstance(frame, TextFrame) and frame.text:
                 cleaned = self._MARKDOWN_RE.sub('', frame.text)
                 frame.text = cleaned
                 # Send cleaned text to client via OutputTransportMessageFrame
                 msg = json.dumps({"type": "tts_update", "text": cleaned})
                 await self.push_frame(OutputTransportMessageFrame(message=msg), direction)
-            await super().process_frame(frame, direction)
+            await self.push_frame(frame, direction)
 
 
 def get_session_words(session_id: str) -> List[str]:
