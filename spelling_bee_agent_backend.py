@@ -869,7 +869,8 @@ if PIPECAT_AVAILABLE:
                     "'Great practice today! Keep it up!'\n\n"
 
                     "STAY ON TOPIC: Only discuss spelling. If off-topic, say: "
-                    "'Let us get back to spelling practice.'\n\n"
+                    "'Let us get back to spelling practice. Your word is [current word].' "
+                    "Always repeat the current word after redirecting.\n\n"
 
                     f"Total words: {word_count}.\n"
                     + (
