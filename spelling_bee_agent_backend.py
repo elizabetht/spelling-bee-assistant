@@ -128,6 +128,41 @@ NEMO_RAILS = None
 NEMO_POLICY_TEXT = ""
 
 
+def _check_model_health(base_url: str) -> bool:
+    """Check if a vLLM model endpoint is reachable via its /models endpoint."""
+    try:
+        url = f"{base_url}/models"
+        req = request.Request(url, method="GET")
+        with request.urlopen(req, timeout=3):
+            return True
+    except Exception:
+        return False
+
+
+def _resolve_llm_endpoint() -> tuple:
+    """Resolve which LLM endpoint to use, with fallback from 30B to VL model.
+
+    Priority:
+    1. Explicit NVIDIA_LLM_URL / NVIDIA_LLM_MODEL env overrides (no fallback).
+    2. VLLM_LLM_BASE (30B model) if healthy.
+    3. VLLM_VL_BASE (VL model) as fallback.
+    """
+    env_url = os.getenv("NVIDIA_LLM_URL")
+    env_model = os.getenv("NVIDIA_LLM_MODEL")
+    if env_url or env_model:
+        return (env_url or VLLM_LLM_BASE, env_model or VLLM_LLM_MODEL)
+
+    if _check_model_health(VLLM_LLM_BASE):
+        return (VLLM_LLM_BASE, VLLM_LLM_MODEL)
+
+    logger.warning(
+        "30B LLM at %s is unreachable; falling back to VL model at %s",
+        VLLM_LLM_BASE,
+        VLLM_VL_BASE,
+    )
+    return (VLLM_VL_BASE, VLLM_VL_MODEL)
+
+
 class _NoOpMemory:
     def save_context(self, _input, _output):
         return None
@@ -489,7 +524,7 @@ def initialize_nemo_guardrails() -> None:
     try:
         # Read config and resolve env-var placeholders that NeMo doesn't expand
         raw_yaml = (config_path / "config.yml").read_text()
-        resolved_model = os.getenv("NVIDIA_LLM_MODEL", VLLM_VL_MODEL)
+        _, resolved_model = _resolve_llm_endpoint()
         raw_yaml = raw_yaml.replace("__NVIDIA_LLM_MODEL__", resolved_model)
         # Load Colang files from the config directory
         colang_content = ""
@@ -719,10 +754,11 @@ if PIPECAT_AVAILABLE:
             ),
         )
 
+        llm_base, llm_model = _resolve_llm_endpoint()
         llm = NvidiaLLMService(
             api_key="not-needed",
-            base_url=os.getenv("NVIDIA_LLM_URL", VLLM_LLM_BASE),
-            model=os.getenv("NVIDIA_LLM_MODEL", VLLM_LLM_MODEL),
+            base_url=llm_base,
+            model=llm_model,
         )
 
         stt = ElevenLabsRealtimeSTTService(
