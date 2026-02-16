@@ -569,8 +569,11 @@ if PIPECAT_AVAILABLE:
                     "A long pause (silence) means they are done.\n\n"
 
                     "RESPONSE FORMAT — YOU MUST USE THESE EXACT PHRASES:\n"
-                    "- If correct, say EXACTLY: 'Correct! Your next word is [word].'\n"
-                    "- If wrong, say EXACTLY: 'Not quite. Your next word is [word].'\n"
+                    "- If correct, say EXACTLY: 'Correct! Your next word is [NEXT word in list].'\n"
+                    "- If wrong, say EXACTLY: 'Not quite. Your next word is [NEXT word in list].'\n"
+                    "- IMPORTANT: Whether correct or wrong, ALWAYS move to the NEXT word "
+                    "in the list. NEVER repeat the same word. Missed words will be "
+                    "reviewed at the end.\n"
                     "- EVERY response after the child spells MUST start with either "
                     "'Correct!' or 'Not quite.' — NEVER skip this judgment.\n"
                     "- NEVER say just 'Your next word is [word]' without first saying "
