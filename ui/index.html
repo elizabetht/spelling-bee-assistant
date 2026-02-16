@@ -326,7 +326,7 @@
         </div>
       </div>
       <div style="text-align:center; margin:10px 0; color:#666;">— or —</div>
-      <button class="primary" id="sampleWordsBtn" style="width:100%;background:#6c63ff;">Use 5 Sample Words (quick test)</button>
+      <button class="primary" id="sampleWordsBtn" style="width:100%;background:#6c63ff;">Use Sample Words (quick test)</button>
       <div class="upload-status" id="uploadStatus"></div>
     </div>
 
@@ -630,7 +630,7 @@ registerProcessor('capture-processor', CaptureProcessor);
         totalWords = data.word_count || 0;
 
         uploadStatus.className = 'upload-status ok';
-        uploadStatus.textContent = `${totalWords} sample words: ${data.sample.join(', ')}`;
+        uploadStatus.textContent = `${totalWords} words loaded. Ready to practice!`;
 
         stepConnect.classList.remove('hidden');
         stepConnect.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -639,7 +639,7 @@ registerProcessor('capture-processor', CaptureProcessor);
         uploadStatus.textContent = `Failed: ${err.message}`;
       } finally {
         sampleWordsBtn.disabled = false;
-        sampleWordsBtn.textContent = 'Use 5 Sample Words (quick test)';
+        sampleWordsBtn.textContent = 'Use Sample Words (quick test)';
       }
     });
 

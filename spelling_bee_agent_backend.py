@@ -466,12 +466,16 @@ SAMPLE_WORD_BANK = [
     "language", "mountain", "necessary", "opposite", "paragraph",
     "question", "remember", "sentence", "together", "umbrella",
     "vacation", "wonderful", "alphabet", "birthday", "children",
-    "discover", "exercise", "February", "grateful", "hospital",
+    "discover", "exercise", "february", "grateful", "hospital",
+    "imagine", "journey", "kitchen", "library", "mystery",
+    "notebook", "opinion", "pleasant", "quietly", "relative",
+    "shoulder", "treasure", "uniform", "village", "weather",
+    "yesterday", "absolute", "behavior", "confident", "decision",
 ]
 
 
 @app.post("/sample-words")
-async def sample_words(count: int = 5):
+async def sample_words(count: int = 25):
     """Generate a session with random sample words for quick testing."""
     words = random.sample(SAMPLE_WORD_BANK, min(count, len(SAMPLE_WORD_BANK)))
     session_id = os.urandom(8).hex()
@@ -480,7 +484,7 @@ async def sample_words(count: int = 5):
     return {
         "session_id": session_id,
         "word_count": len(words),
-        "sample": words,
+        "sample": [],
         "next": f"Connect websocket at /pipecat/ws/{session_id}",
     }
 
