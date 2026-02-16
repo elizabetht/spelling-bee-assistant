@@ -454,6 +454,12 @@ if PIPECAT_AVAILABLE:
 
                     "YOUR JOB: Present a word, wait for the child to spell it, then judge.\n\n"
 
+                    "GREETING:"
+                    "- When the user says 'Start the spelling bee', say EXACTLY: "
+                    "'Hello! Welcome to spelling bee practice. Your first word is [first word].'"
+                    "- When the user says 'Continue the spelling bee', say EXACTLY: "
+                    "'Welcome back! Let us continue our spelling bee practice. Your word is [current word].'"
+
                     "PRESENTING WORDS:\n"
                     "- Say ONLY the whole word. Example: 'Your word is elephant.'\n"
                     "- NEVER spell out, break apart, or show letters. FORBIDDEN output: "
@@ -536,37 +542,17 @@ if PIPECAT_AVAILABLE:
         async def on_client_connected(transport, client):
             del transport, client
             if session_words and is_resuming:
-                # Continuing a session — skip to the current word
                 messages.append(
                     {
                         "role": "user",
                         "content": "Continue the spelling bee.",
                     }
                 )
-                messages.append(
-                    {
-                        "role": "assistant",
-                        "content": (
-                            f"Welcome back! Let's continue our spelling bee practice. "
-                            f"Your word is {current_word}."
-                        ),
-                    }
-                )
             elif session_words:
-                # New session — greet and present first word
                 messages.append(
                     {
                         "role": "user",
                         "content": "Start the spelling bee.",
-                    }
-                )
-                messages.append(
-                    {
-                        "role": "assistant",
-                        "content": (
-                            f"Hello! Welcome to spelling bee practice. "
-                            f"Your first word is {first_word}."
-                        ),
                     }
                 )
             else:

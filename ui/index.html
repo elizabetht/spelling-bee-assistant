@@ -903,13 +903,11 @@ registerProcessor('capture-processor', CaptureProcessor);
           }
           playAudioChunk(frame.pcm, frame.sampleRate);
         } else if (frame.type === 'transcription') {
-          // ASR transcription from user speech — finalize any open bot entry first
-          if (currentBotEntry) {
-            currentBotEntry.querySelector('.transcript-text').classList.remove('interim');
+          // ASR transcription from user speech — finalize any pending bot utterance
+          if (botUtteranceBuffer) {
             parseScoreFromText(botUtteranceBuffer);
             botUtteranceBuffer = '';
             botSegmentStart = 0;
-            currentBotEntry = null;
             isBotSpeaking = false;
             if (botUtteranceTimer) { clearTimeout(botUtteranceTimer); botUtteranceTimer = null; }
             if (!isMuted) {
@@ -951,10 +949,6 @@ registerProcessor('capture-processor', CaptureProcessor);
       botUtteranceTimer = setTimeout(() => {
         if (botUtteranceBuffer) {
           parseScoreFromText(botUtteranceBuffer);
-          if (currentBotEntry) {
-            currentBotEntry.querySelector('.transcript-text').classList.remove('interim');
-            currentBotEntry = null;
-          }
           botUtteranceBuffer = '';
           botSegmentStart = 0;
           isBotSpeaking = false;
@@ -983,21 +977,14 @@ registerProcessor('capture-processor', CaptureProcessor);
         updateTranscriptText(currentUserEntry, msg.text || msg.data || '', false);
         currentUserEntry = null;
       } else if (type === 'tts_update') {
-        // Bot speaking text — accumulate across TTS segments
+        // Bot speaking — accumulate text for score parsing but do NOT display.
+        // Showing the text would reveal the word the child needs to spell.
         isBotSpeaking = true;
         micIndicator.className = 'mic-indicator bot-speaking';
         statusLabel.textContent = 'Tutor is speaking...';
 
-        if (!currentBotEntry) {
-          currentBotEntry = addTranscriptEntry('bot');
-          botUtteranceBuffer = '';
-          botSegmentStart = 0;
-        }
-        // Within a segment, tts_update is cumulative — replace from segmentStart.
-        // Across segments, segmentStart advances so previous text is preserved.
         const newText = msg.text || msg.data || '';
         botUtteranceBuffer = botUtteranceBuffer.slice(0, botSegmentStart) + newText;
-        updateTranscriptText(currentBotEntry, botUtteranceBuffer, true);
         resetBotUtteranceTimer();
       } else if (type === 'tts_end') {
         // One TTS segment finished — advance segment boundary but keep accumulating.
