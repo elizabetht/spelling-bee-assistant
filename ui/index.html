@@ -191,6 +191,39 @@
       .score-value.total { color: #f5c842; }
       .score-value.word { color: #90caf9; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 
+      /* --- Speech bubble (live ASR) --- */
+      .speech-bubble {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 16px;
+        border: 1px solid #2a2a4a;
+        border-radius: 10px;
+        margin-bottom: 12px;
+        background: #1e2a4a;
+        min-height: 44px;
+      }
+
+      .speech-bubble-label {
+        color: #90caf9;
+        font-weight: 700;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        white-space: nowrap;
+      }
+
+      .speech-bubble-text {
+        color: #e0e0e0;
+        font-size: 1.1rem;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        letter-spacing: 0.05em;
+      }
+
+      .speech-bubble-text.interim {
+        opacity: 0.5;
+      }
+
       /* --- Session status bar --- */
       .session-status {
         display: flex;
@@ -362,6 +395,11 @@
         </div>
       </div>
 
+      <div class="speech-bubble" id="speechBubble">
+        <span class="speech-bubble-label">You said</span>
+        <span class="speech-bubble-text" id="speechBubbleText">...</span>
+      </div>
+
       <div class="session-status">
         <div class="mic-indicator" id="micIndicator"></div>
         <span class="status-label" id="statusLabel">Connecting...</span>
@@ -482,6 +520,7 @@ registerProcessor('capture-processor', CaptureProcessor);
     const scoreCorrectEl = document.getElementById('scoreCorrect');
     const scoreIncorrectEl = document.getElementById('scoreIncorrect');
     const scoreProgressEl = document.getElementById('scoreProgress');
+    const speechBubbleText = document.getElementById('speechBubbleText');
 
     function updateScoreUI() {
       const attempted = scoreCorrect + scoreIncorrect;
@@ -965,6 +1004,8 @@ registerProcessor('capture-processor', CaptureProcessor);
               statusLabel.textContent = 'Listening...';
             }
           }
+          speechBubbleText.textContent = frame.text || '...';
+          speechBubbleText.classList.remove('interim');
           if (!currentUserEntry) {
             currentUserEntry = addTranscriptEntry('user');
           }
@@ -1015,18 +1056,24 @@ registerProcessor('capture-processor', CaptureProcessor);
 
       if (type === 'asr_update') {
         // Interim user speech
-        console.log('[ASR] asr_update (interim):', JSON.stringify(msg.text || msg.data || ''));
+        const interimText = msg.text || msg.data || '';
+        console.log('[ASR] asr_update (interim):', JSON.stringify(interimText));
+        speechBubbleText.textContent = interimText || '...';
+        speechBubbleText.classList.add('interim');
         if (!currentUserEntry) {
           currentUserEntry = addTranscriptEntry('user');
         }
-        updateTranscriptText(currentUserEntry, msg.text || msg.data || '', true);
+        updateTranscriptText(currentUserEntry, interimText, true);
       } else if (type === 'asr_end') {
         // Final user speech
-        console.log('[ASR] asr_end (final):', JSON.stringify(msg.text || msg.data || ''));
+        const finalText = msg.text || msg.data || '';
+        console.log('[ASR] asr_end (final):', JSON.stringify(finalText));
+        speechBubbleText.textContent = finalText || '...';
+        speechBubbleText.classList.remove('interim');
         if (!currentUserEntry) {
           currentUserEntry = addTranscriptEntry('user');
         }
-        updateTranscriptText(currentUserEntry, msg.text || msg.data || '', false);
+        updateTranscriptText(currentUserEntry, finalText, false);
         currentUserEntry = null;
       } else if (type === 'tts_update') {
         // Bot speaking — accumulate text for score parsing but do NOT display.
@@ -1255,6 +1302,8 @@ registerProcessor('capture-processor', CaptureProcessor);
       stepUpload.classList.remove('hidden');
       stepConnect.classList.remove('hidden');
       transcript.innerHTML = '<div class="transcript-empty">Waiting for conversation to start...</div>';
+      speechBubbleText.textContent = '...';
+      speechBubbleText.classList.remove('interim');
       currentUserEntry = null;
       currentBotEntry = null;
       botUtteranceBuffer = '';
