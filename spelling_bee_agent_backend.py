@@ -722,7 +722,7 @@ if PIPECAT_AVAILABLE:
                         confidence=0.7,
                         min_volume=0.3,
                         start_secs=0.3,
-                        stop_secs=3.0,
+                        stop_secs=5.0,  # 5s silence → child is done spelling
                     )
                 ),
                 audio_out_10ms_chunks=20,
@@ -740,7 +740,13 @@ if PIPECAT_AVAILABLE:
         stt = ElevenLabsRealtimeSTTService(
             api_key=os.getenv("ELEVENLABS_API_KEY"),
             sample_rate=16000,
-            params=ElevenLabsRealtimeSTTService.InputParams(language_code="eng"),
+            params=ElevenLabsRealtimeSTTService.InputParams(
+                language_code="eng",
+                # Children pause 2-3s between letters when spelling aloud.
+                # Default 1.5s finalizes the transcript too early, causing the
+                # LLM to respond before the child finishes spelling.
+                vad_silence_threshold_secs=4.0,
+            ),
         )
 
         tts = ElevenLabsTTSService(

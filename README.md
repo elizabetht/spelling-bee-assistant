@@ -27,56 +27,49 @@ Students upload a photo of their spelling word list, and the assistant extracts 
 │   │                    │         │                                   │     │
 │   │  1. Decode image   │         │  Pipecat ACE Pipeline            │     │
 │   │  2. Extract words  │         │  ┌─────────────────────────────┐ │     │
-│   │     via VLM ───────┼────┐    │  │                             │ │     │
-│   │  3. Store in Redis │    │    │  │  Audio In ──► ElevenLabs   │ │     │
-│   │  4. Return         │    │    │  │              ASR (Scribe)   │ │     │
-│   │     session_id     │    │    │  │                 ▼            │ │     │
-│   │                    │    │    │  │         NeMo Guardrails      │ │     │
-│   └────────┬───────────┘    │    │  │                 │            │ │     │
-│            │                │    │  │                 ▼            │ │     │
-│            │                │    │  │     Nemotron-3-Nano-30B ─────┼─┼──┐  │
-│            │                │    │  │       (Spelling Coach)       │ │  │  │
-│            │                │    │  │                 │            │ │  │  │
-│            │                │    │  │                 ▼            │ │  │  │
-│            │                │    │  │         ElevenLabs TTS        │ │  │  │
-│            │                │    │  │         (Cloud API)           │ │  │  │
-│            │                │    │  │                 ▼            │ │  │  │
-│            │                │    │  │           Audio Out          │ │  │  │
-│            │                │    │  │                             │ │  │  │
-│            │                │    │  └─────────────────────────────┘ │  │  │
-│            │                │    └───────────────────────────────────┘  │  │
-│            │                │                  │                        │  │
-│            ▼                │                  ▼                        │  │
-│   ┌─────────────────────────────────────────────────────┐              │  │
-│   │                   Redis                             │              │  │
-│   │   Session words, progress, chat history (24h TTL)   │              │  │
-│   └─────────────────────────────────────────────────────┘              │  │
-└─────────────────────────┼──────────────────────────────────────────────┼──┘
-                          │                                              │
-                          ▼                                              ▼
+│   │     via VLM        │         │  │                             │ │     │
+│   │  3. Store in Redis │         │  │  Audio In ──► ElevenLabs   │ │     │
+│   │  4. Return         │         │  │              ASR (Scribe)   │ │     │
+│   │     session_id     │         │  │                 ▼            │ │     │
+│   │                    │         │  │         NeMo Guardrails      │ │     │
+│   └────────┬───────────┘         │  │                 │            │ │     │
+│            │                     │  │                 ▼            │ │     │
+│            │                     │  │        Nemotron-Nano         │ │     │
+│            │                     │  │       (Spelling Coach)       │ │     │
+│            │                     │  │                 │            │ │     │
+│            │                     │  │                 ▼            │ │     │
+│            │                     │  │         ElevenLabs TTS        │ │     │
+│            │                     │  │         (Cloud API)           │ │     │
+│            │                     │  │                 ▼            │ │     │
+│            │                     │  │           Audio Out          │ │     │
+│            │                     │  │                             │ │     │
+│            │                     │  └─────────────────────────────┘ │     │
+│            │                     └───────────────────────────────────┘     │
+│            │                                    │                          │
+│            ▼                                    ▼                          │
+│   ┌─────────────────────────────────────────────────────┐                  │
+│   │                   Redis                             │                  │
+│   │   Session words, progress, chat history (24h TTL)   │                  │
+│   └─────────────────────────────────────────────────────┘                  │
+└────────────────────────────────────────────────────────────────────────────┘
+             │                                    │
+             ▼                                    ▼
 ┌────────────────────────────────────────────────────────────────────────────┐
 │                          NVIDIA AI Services                                │
 │                                                                            │
-│   ┌───────────────────────────┐  ┌───────────────────────────────────┐    │
-│   │  Nemotron-Nano-12B-VL-FP8│  │  Nemotron-3-Nano-30B-A3B-FP8    │    │
-│   │  (vLLM, self-hosted)     │  │  (vLLM, self-hosted)             │    │
-│   │                          │  │                                   │    │
-│   │  Image → Words           │  │  Voice Coach LLM                 │    │
-│   │  :5566                   │  │  Definitions / Sentences          │    │
-│   └───────────────────────────┘  │  :5567                           │    │
-│                                   └───────────────────────────────────┘    │
-│   ┌──────────────┐  ┌──────────────────┐                                  │
-│   │ ElevenLabs   │  │ ElevenLabs TTS   │                                  │
-│   │ STT (Scribe) │  │ (Cloud API)      │                                  │
-│   │ (cloud API)  │  │                  │                                  │
-│   │ Speech →     │  │  Text → Speech   │                                  │
-│   │ Text         │  │  16kHz PCM       │                                  │
-│   └──────────────┘  └──────────────────┘                                  │
+│   ┌───────────────────────────┐  ┌──────────────┐  ┌──────────────────┐  │
+│   │  Nemotron-Nano-12B-VL-FP8│  │ ElevenLabs   │  │ ElevenLabs TTS   │  │
+│   │  (vLLM, self-hosted)     │  │ STT (Scribe) │  │ (Cloud API)      │  │
+│   │                          │  │ (cloud API)  │  │                  │  │
+│   │  Image → Words           │  │ Speech →     │  │  Text → Speech   │  │
+│   │  Definitions / Sentences │  │ Text         │  │  16kHz PCM       │  │
+│   │  Voice Coach LLM         │  │              │  │                  │  │
+│   └───────────────────────────┘  └──────────────┘  └──────────────────┘  │
 │                                                                            │
-│   ┌──────────────────────────────────────────────────────────────────┐    │
-│   │  NeMo Guardrails                                                │    │
-│   │  Topic enforcement, intent filtering, child-safe content policy │    │
-│   └──────────────────────────────────────────────────────────────────┘    │
+│   ┌──────────────────────────────────────────────────────────────────┐  │
+│   │  NeMo Guardrails                                                │  │
+│   │  Topic enforcement, intent filtering, child-safe content policy │  │
+│   └──────────────────────────────────────────────────────────────────┘  │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -85,10 +78,10 @@ Students upload a photo of their spelling word list, and the assistant extracts 
 | Component | Technology | Role |
 |---|---|---|
 | **Voice Pipeline** | NVIDIA Pipecat (ACE) | Orchestrates real-time audio I/O, ASR, LLM, and TTS |
-| **Vision-Language Model** | Nemotron-Nano-12B-VL-FP8 via vLLM | Extracts spelling words from uploaded images (port 5566) |
+| **Vision-Language Model** | Nemotron-Nano-12B-VL-FP8 via vLLM | Extracts spelling words from uploaded images |
 | **Speech Recognition** | ElevenLabs STT (Scribe, cloud API) | Streaming speech-to-text via WebSocket |
 | **Text-to-Speech** | ElevenLabs TTS (Cloud API) | Natural voice output at 16kHz |
-| **Conversational LLM** | Nemotron-3-Nano-30B-A3B-FP8 via vLLM | Powers the interactive spelling coach (port 5567) |
+| **Conversational LLM** | Nemotron-Nano-12B-VL-FP8 via vLLM | Powers the interactive spelling coach (same model as VLM) |
 | **Safety** | NeMo Guardrails | Enforces spelling-only scope, filters off-topic intent |
 | **Session Store** | Redis + LangChain | Persistent word lists, progress, and chat history |
 | **Fallback OCR** | Tesseract (pytesseract) | Backup word extraction when VLM is unavailable |
@@ -127,39 +120,32 @@ Students upload a photo of their spelling word list, and the assistant extracts 
 ## Deployment Diagram
 
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                        Kubernetes Cluster (microk8s)                      │
-│                        Namespace: spellingbee                             │
-│                                                                          │
-│   ┌─────────────────────────────────────┐                                │
-│   │         Controller Node             │                                │
-│   │                                     │                                │
-│   │   ┌───────────────────────────┐     │                                │
-│   │   │  Backend Pod              │     │                                │
-│   │   │  spelling-bee-agent       │     │   ┌──────────────────────────┐ │
-│   │   │  NodePort :30088          │     │   │    GPU Node              │ │
-│   │   └───────────┬───────────────┘     │   │                          │ │
-│   │               │                     │   │   ┌────────────────────┐ │ │
-│   │   ┌───────────▼───────────────┐     │   │   │  vLLM Pod (VLM)   │ │ │
-│   │   │  Redis Pod                │     │   │   │  Nemotron-Nano     │ │ │
-│   │   │  Session Store            │     │   │   │  12B-VL-FP8        │ │ │
-│   │   └───────────────────────────┘     │   │   │  NodePort :30566   │ │ │
-│   │                                     │   │   │  GPU: GB10         │ │ │
-│   └─────────────────────────────────────┘   │   └────────────────────┘ │ │
-│                                              │                          │ │
-│                                              │   ┌────────────────────┐ │ │
-│                                              │   │  vLLM Pod (LLM)   │ │ │
-│                                              │   │  Nemotron-3-Nano   │ │ │
-│                                              │   │  30B-A3B-FP8       │ │ │
-│                                              │   │  NodePort :30567   │ │ │
-│                                              │   │  GPU: GB10         │ │ │
-│                                              │   └────────────────────┘ │ │
-│                                              └──────────────────────────┘ │
-│                                                                          │
-│   External (Cloud APIs):                                                 │
-│     • ElevenLabs ASR  → api.elevenlabs.io (Scribe v1)                    │
-│     • ElevenLabs TTS  → api.elevenlabs.io (Cloud API)                    │
-└──────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                        Kubernetes Cluster (microk8s)                  │
+│                        Namespace: spellingbee                         │
+│                                                                      │
+│   ┌─────────────────────────────────────┐                            │
+│   │         Controller Node             │                            │
+│   │                                     │                            │
+│   │   ┌───────────────────────────┐     │                            │
+│   │   │  Backend Pod              │     │                            │
+│   │   │  spelling-bee-agent       │     │   ┌──────────────────────┐ │
+│   │   │  NodePort :30088          │     │   │    GPU Node          │ │
+│   │   └───────────┬───────────────┘     │   │                      │ │
+│   │               │                     │   │   ┌────────────────┐ │ │
+│   │   ┌───────────▼───────────────┐     │   │   │  vLLM Pod      │ │ │
+│   │   │  Redis Pod                │     │   │   │  Nemotron-Nano │ │ │
+│   │   │  Session Store            │     │   │   │  12B-VL-FP8    │ │ │
+│   │   └───────────────────────────┘     │   │   │  NodePort      │ │ │
+│   │                                     │   │   │  :30566        │ │ │
+│   └─────────────────────────────────────┘   │   │  GPU: GB10     │ │ │
+│                                              │   └────────────────┘ │ │
+│                                              └──────────────────────┘ │
+│                                                                      │
+│   External (Cloud APIs):                                             │
+│     • ElevenLabs ASR  → api.elevenlabs.io (Scribe v1)                │
+│     • ElevenLabs TTS  → api.elevenlabs.io (Cloud API)                │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ## NVIDIA Technologies Used
@@ -167,8 +153,7 @@ Students upload a photo of their spelling word list, and the assistant extracts 
 - **NVIDIA Pipecat (ACE)** — Real-time voice agent pipeline framework
 - **ElevenLabs STT (Scribe)** — Cloud-hosted streaming speech-to-text (WebSocket API)
 - **ElevenLabs TTS** — Cloud-hosted text-to-speech (Cloud API)
-- **Nemotron-Nano-12B-VL-FP8** — Vision-language model for image word extraction, served via vLLM (port 5566)
-- **Nemotron-3-Nano-30B-A3B-FP8** — Conversational LLM for voice spelling coaching, served via vLLM (port 5567)
+- **Nemotron-Nano-12B-VL-FP8** — Vision-language model for image understanding and conversational coaching, served via vLLM
 - **NeMo Guardrails** — Programmable safety rails for topic enforcement and content filtering
 - **NVIDIA Container Runtime** — GPU-accelerated container execution
 
@@ -210,7 +195,7 @@ kubectl -n spellingbee create secret generic hf-token \
   --from-literal=token=<YOUR_HF_TOKEN>
 ```
 
-**2. Deploy everything (models + Redis + backend)**
+**2. Deploy everything (model + Redis + backend)**
 
 ```bash
 ./deploy/deploy_all.sh
@@ -219,14 +204,13 @@ kubectl -n spellingbee create secret generic hf-token \
 Or deploy individually:
 
 ```bash
-./deploy/deploy_model.sh      # vLLM Nemotron-Nano-12B-VL-FP8 (VLM) on GPU node
-./deploy/deploy_llm_model.sh  # vLLM Nemotron-3-Nano-30B-A3B-FP8 (LLM) on GPU node
+./deploy/deploy_model.sh      # vLLM Nemotron-Nano-12B-VL-FP8 on GPU node
 ./deploy/deploy_redis.sh      # Redis session store on controller node
 ./deploy/deploy_backend.sh    # FastAPI backend on controller node
 ```
 
 > **Note:** ASR and TTS are cloud-hosted via ElevenLabs, so no GPU pod for
-> speech services is needed. The two vLLM models each require a GPU.
+> speech services is needed. Only the vLLM model requires a GPU.
 
 The backend script builds the Docker image, pushes it to the local registry,
 applies the K8s manifest, and waits for rollout.
@@ -265,13 +249,11 @@ spelling-bee-assistant/
 │   └── rails.co                    # Intent policies (spelling scope)
 ├── deploy/
 │   ├── spelling-bee-agent-backend.k8s.yaml  # K8s backend manifest
-│   ├── vllm-nemotron-nano-vl-8b.yaml        # K8s VLM manifest (12B)
-│   ├── vllm-nemotron-nano-30b.yaml          # K8s LLM manifest (30B)
+│   ├── vllm-nemotron-nano-vl-8b.yaml        # K8s vLLM model manifest
 │   ├── redis.k8s.yaml                       # K8s Redis manifest
-│   ├── deploy_all.sh               # Deploy models + Redis + backend
+│   ├── deploy_all.sh               # Deploy model + Redis + backend
 │   ├── deploy_backend.sh           # Deploy backend only
-│   ├── deploy_model.sh             # Deploy VLM model only
-│   ├── deploy_llm_model.sh         # Deploy LLM model only
+│   ├── deploy_model.sh             # Deploy vLLM model only
 │   ├── deploy_redis.sh             # Deploy Redis only
 │   └── smoke_test.sh               # End-to-end integration test
 ├── Dockerfile                      # Backend container image
@@ -287,9 +269,7 @@ spelling-bee-assistant/
 | `ENABLE_NEMO_GUARDRAILS` | `false` | Enable NeMo Guardrails |
 | `NEMO_GUARDRAILS_CONFIG_PATH` | `./guardrails` | Path to guardrails config |
 | `REDIS_URL` | `redis://localhost:6379/0` | Redis connection URL |
-| `VLLM_VL_BASE` | `http://vllm-nemotron-nano-vl-8b:5566/v1` | VLM endpoint for image word extraction |
-| `VLLM_VL_MODEL` | `nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-FP8` | Vision-language model for image extraction |
-| `VLLM_LLM_BASE` | `http://vllm-nemotron-nano-30b:5567/v1` | LLM endpoint for voice coaching |
-| `VLLM_LLM_MODEL` | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` | Conversational LLM for voice pipeline |
-| `NVIDIA_LLM_URL` | Same as `VLLM_LLM_BASE` | Override LLM endpoint for voice pipeline |
-| `NVIDIA_LLM_MODEL` | Same as `VLLM_LLM_MODEL` | Override LLM model for voice pipeline |
+| `VLLM_VL_BASE` | `http://vllm-nemotron-nano-vl-8b:5566/v1` | vLLM endpoint (used for both image extraction and voice coaching) |
+| `VLLM_VL_MODEL` | `nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-FP8` | Vision-language model (one model, two roles) |
+| `NVIDIA_LLM_URL` | Same as `VLLM_VL_BASE` | Override LLM endpoint for voice pipeline |
+| `NVIDIA_LLM_MODEL` | Same as `VLLM_VL_MODEL` | Override LLM model for voice pipeline |
