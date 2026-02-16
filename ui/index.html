@@ -501,6 +501,7 @@ registerProcessor('capture-processor', CaptureProcessor);
     let isReviewPhase = false;
     let reviewCorrect = 0;
     let practiceComplete = false;
+    let serverVerdictWord = null; // track last word judged by server to avoid double-count
 
     // ===================== DOM refs =====================
     const stepUpload = document.getElementById('stepUpload');
@@ -556,6 +557,17 @@ registerProcessor('capture-processor', CaptureProcessor);
       if (!text) return;
       console.log('[Score] parseScoreFromText called with:', JSON.stringify(text));
 
+      // If the server already sent a verdict for this word via spelling_verdict,
+      // skip text-based scoring to avoid double-counting.
+      if (serverVerdictWord) {
+        console.log('[Score] Skipping text parse — server verdict already received for:', serverVerdictWord);
+        serverVerdictWord = null; // reset for next word
+        // Still parse word announcements and review/complete detection below
+        // but skip the correct/incorrect counting section.
+        parseWordAndPhaseFromText(text);
+        return;
+      }
+
       // Check INCORRECT first — "Not quite. The correct spelling is X" contains
       // the word "correct" but is actually an incorrect judgment.
       if (/\bnot\s+quite\b/i.test(text) ||
@@ -592,6 +604,13 @@ registerProcessor('capture-processor', CaptureProcessor);
         console.log('[Score] No correct/incorrect pattern matched in:', text.substring(0, 100));
       }
 
+      // Detect review phase, practice complete, and word announcements
+      parseWordAndPhaseFromText(text);
+    }
+
+    // Detect review phase, practice completion, and current word from bot text.
+    // Separated from scoring so it can run even when server verdict handled scoring.
+    function parseWordAndPhaseFromText(text) {
       // Detect review phase
       if (/\breview\s+the\s+words\s+you\s+missed\b/i.test(text) ||
           /\breview\s+round\b/i.test(text) ||
@@ -1066,6 +1085,28 @@ registerProcessor('capture-processor', CaptureProcessor);
 
     function handleTranscriptMessage(msg) {
       const type = msg.type;
+
+      // Server-side spelling verdict — update score directly
+      if (type === 'spelling_verdict') {
+        const v = msg.verdict; // "correct" or "incorrect"
+        const word = msg.word || '';
+        const nextWord = msg.next_word || null;
+        console.log('[Score] spelling_verdict from server:', v, 'word:', word, 'next:', nextWord);
+        if (v === 'correct') {
+          scoreCorrect++;
+          if (isReviewPhase) reviewCorrect++;
+          console.log('[Score] CORRECT (server)! total:', scoreCorrect);
+        } else if (v === 'incorrect') {
+          scoreIncorrect++;
+          console.log('[Score] INCORRECT (server)! total:', scoreIncorrect);
+        }
+        serverVerdictWord = word.toLowerCase();
+        if (nextWord) {
+          currentWord = nextWord.toLowerCase();
+        }
+        updateScoreUI();
+        return;
+      }
 
       if (type === 'asr_update') {
         // Interim user speech

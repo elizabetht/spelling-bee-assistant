@@ -273,6 +273,9 @@ if PIPECAT_AVAILABLE:
                     redirect = await self._check_guardrails_async(text)
                     if redirect or not self._is_on_topic(text):
                         logger.info("GuardrailsFilter: blocked off-topic input: %r", text)
+                        # Replace the off-topic text so the LLM never sees the
+                        # actual question (prevents it from answering).
+                        frame.text = "(off-topic)"
                         self._messages.append({
                             "role": "system",
                             "content": (
@@ -526,6 +529,20 @@ if PIPECAT_AVAILABLE:
                             ),
                         }
                         self._messages.append(result_msg)
+
+                        # Send verdict directly to the UI so score updates
+                        # don't depend on LLM echoing "Correct!" / "Not quite."
+                        verdict_ui = OutputTransportMessageFrame(
+                            message={
+                                "type": "spelling_verdict",
+                                "verdict": verdict.lower(),
+                                "word": target,
+                                "spelled": spelled,
+                                "next_word": next_word,
+                            }
+                        )
+                        await self.push_frame(verdict_ui, direction)
+
                         logger.info(
                             "SpellingVerifier: %s spelled='%s' target='%s' next='%s'",
                             verdict, spelled, target, next_word or 'LAST',
