@@ -502,6 +502,9 @@ registerProcessor('capture-processor', CaptureProcessor);
           /\bperfect\b/i.test(text) ||
           /\byou\s+(got|spelled|nailed)\s+it/i.test(text) ||
           /\bnice\s+(job|work|spelling)\b/i.test(text) ||
+          /\bwonderful\s*(job|work|spelling)?\b/i.test(text) ||
+          /\bfantastic\b/i.test(text) ||
+          /\bbrilliant\b/i.test(text) ||
           /\bexactly\s*(right|!|\.)/i.test(text) ||
           /\bawesome\b/i.test(text) ||
           /\bexcellent\b/i.test(text)) {
@@ -993,7 +996,21 @@ registerProcessor('capture-processor', CaptureProcessor);
         statusLabel.textContent = 'Tutor is speaking...';
 
         const newText = msg.text || msg.data || '';
-        console.log('[TTS] tts_update text:', JSON.stringify(newText), 'bufLen:', botUtteranceBuffer.length);
+        const currentSegment = botUtteranceBuffer.slice(botSegmentStart);
+
+        // Detect new TTS segment: if the incoming text isn't a continuation of
+        // the current segment (i.e. it neither extends nor is a prefix of it),
+        // a new TTS chunk has started. Advance the segment boundary so the
+        // previous segment text is preserved in the buffer.
+        if (currentSegment && !newText.startsWith(currentSegment) && !currentSegment.startsWith(newText)) {
+          if (!botUtteranceBuffer.endsWith(' ')) {
+            botUtteranceBuffer += ' ';
+          }
+          botSegmentStart = botUtteranceBuffer.length;
+          console.log('[TTS] new segment detected, preserving previous:', JSON.stringify(currentSegment));
+        }
+
+        console.log('[TTS] tts_update text:', JSON.stringify(newText), 'bufLen:', botUtteranceBuffer.length, 'segStart:', botSegmentStart);
         botUtteranceBuffer = botUtteranceBuffer.slice(0, botSegmentStart) + newText;
         resetBotUtteranceTimer();
       } else if (type === 'tts_end') {
