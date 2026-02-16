@@ -779,7 +779,7 @@ if PIPECAT_AVAILABLE:
             params=NvidiaLLMService.InputParams(
                 max_tokens=80,
                 temperature=0.1,
-                extra={"stop": ["\n", "Nouns:", "Verbs:", "Adjectives:", "Anagrams:"]},
+                extra={"stop": ["Nouns:", "Verbs:", "Adjectives:", "Anagrams:"]},
             ),
         )
 
