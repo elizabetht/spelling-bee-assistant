@@ -998,9 +998,9 @@ registerProcessor('capture-processor', CaptureProcessor);
           currentBotEntry = addTranscriptEntry('bot');
           botUtteranceBuffer = '';
         }
-        // Accumulate TTS text
+        // BotTranscriptSynchronization sends accumulated text, not deltas — replace buffer
         const newText = msg.text || msg.data || '';
-        botUtteranceBuffer += newText;
+        botUtteranceBuffer = newText;
         updateTranscriptText(currentBotEntry, botUtteranceBuffer, true);
       } else if (type === 'tts_end') {
         // Bot done speaking — parse score from full utterance

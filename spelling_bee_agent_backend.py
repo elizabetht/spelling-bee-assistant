@@ -40,7 +40,15 @@ except ImportError:
 try:
     from pipecat.audio.vad.silero import SileroVADAnalyzer
     from pipecat.audio.vad.vad_analyzer import VADParams
-    from pipecat.frames.frames import Frame, LLMMessagesFrame, OutputAudioRawFrame, TextFrame, TTSAudioRawFrame
+    from pipecat.frames.frames import (
+        BotStoppedSpeakingFrame,
+        Frame,
+        LLMMessagesFrame,
+        OutputAudioRawFrame,
+        OutputTransportMessageFrame,
+        TextFrame,
+        TTSAudioRawFrame,
+    )
     from pipecat.pipeline.pipeline import Pipeline
     from pipecat.pipeline.task import PipelineParams, PipelineTask
     from pipecat.processors.aggregators.llm_context import LLMContext
@@ -48,6 +56,7 @@ try:
     from pipecat.serializers.protobuf import ProtobufFrameSerializer
 
     from nvidia_pipecat.pipeline.ace_pipeline_runner import ACEPipelineRunner, PipelineMetadata
+    from nvidia_pipecat.frames.transcripts import BotUpdatedSpeakingTranscriptFrame
     from nvidia_pipecat.processors.nvidia_context_aggregator import create_nvidia_context_aggregator
     from nvidia_pipecat.processors.transcript_synchronization import (
         BotTranscriptSynchronization,
@@ -130,6 +139,29 @@ if PIPECAT_AVAILABLE:
             await super().process_frame(frame, direction)
             if isinstance(frame, TextFrame) and frame.text:
                 frame.text = self._MARKDOWN_RE.sub('', frame.text)
+            await self.push_frame(frame, direction)
+
+    class TranscriptBridge(FrameProcessor):
+        """Convert nvidia-pipecat transcript frames to serializable transport messages.
+
+        BotUpdatedSpeakingTranscriptFrame is a SystemFrame and cannot be
+        serialized by ProtobufFrameSerializer.  This processor converts them
+        to OutputTransportMessageFrame (tts_update / tts_end JSON) so the
+        browser UI receives bot text for score parsing and transcript display.
+        """
+
+        async def process_frame(self, frame: Frame, direction: FrameDirection):
+            await super().process_frame(frame, direction)
+            if isinstance(frame, BotUpdatedSpeakingTranscriptFrame):
+                msg = OutputTransportMessageFrame(
+                    message={"type": "tts_update", "text": frame.transcript}
+                )
+                await self.push_frame(msg, direction)
+            elif isinstance(frame, BotStoppedSpeakingFrame):
+                msg = OutputTransportMessageFrame(
+                    message={"type": "tts_end"}
+                )
+                await self.push_frame(msg, direction)
             await self.push_frame(frame, direction)
 
 
@@ -465,6 +497,7 @@ if PIPECAT_AVAILABLE:
         context_aggregator = create_nvidia_context_aggregator(context, send_interims=False)
 
         md_stripper = MarkdownStripper()
+        transcript_bridge = TranscriptBridge()
 
         pipeline = Pipeline(
             [
@@ -476,6 +509,7 @@ if PIPECAT_AVAILABLE:
                 md_stripper,
                 tts,
                 tts_transcript_synchronization,
+                transcript_bridge,
                 transport.output(),
                 context_aggregator.assistant(),
             ]
