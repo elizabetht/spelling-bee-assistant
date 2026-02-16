@@ -921,18 +921,8 @@ registerProcessor('capture-processor', CaptureProcessor);
           updateTranscriptText(currentUserEntry, frame.text, false);
           currentUserEntry = null;
         } else if (frame.type === 'text') {
-          // TTS text from bot
-          console.log('[WS] text frame:', frame.text?.substring(0, 80));
-          isBotSpeaking = true;
-          micIndicator.className = 'mic-indicator bot-speaking';
-          statusLabel.textContent = 'Tutor is speaking...';
-          if (!currentBotEntry) {
-            currentBotEntry = addTranscriptEntry('bot');
-            botUtteranceBuffer = '';
-          }
-          botUtteranceBuffer += frame.text;
-          updateTranscriptText(currentBotEntry, botUtteranceBuffer, true);
-          resetBotUtteranceTimer();
+          // Raw LLM tokens — ignore for display; tts_update handles transcript
+          // synchronized with audio playback via TranscriptBridge.
         } else if (frame.type === 'message') {
           // JSON messages (tts_update, tts_end, asr_update, asr_end, etc.)
           handleTranscriptMessage(frame.data);
