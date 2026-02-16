@@ -345,18 +345,45 @@ if PIPECAT_AVAILABLE:
                         spelled = letters.upper()
                         target_upper = target.upper()
                         verdict = "CORRECT" if spelled == target_upper else "INCORRECT"
+
+                        # Determine the next word so the LLM doesn't have to
+                        idx = self._review_injector._words_judged
+                        next_idx = idx + 1
+                        next_word = (
+                            self._session_words[next_idx]
+                            if next_idx < len(self._session_words)
+                            else None
+                        )
+
+                        if verdict == "CORRECT":
+                            if next_word:
+                                say = f"Say EXACTLY: 'Correct! Your next word is {next_word}.'"
+                            else:
+                                say = "Say EXACTLY: 'Correct! All done!'"
+                        else:
+                            if next_word:
+                                say = (
+                                    f"Say EXACTLY: 'Not quite. The correct spelling is {target}. "
+                                    f"Your next word is {next_word}.'"
+                                )
+                            else:
+                                say = (
+                                    f"Say EXACTLY: 'Not quite. The correct spelling is {target}. "
+                                    f"All done!'"
+                                )
+
                         result_msg = {
                             "role": "system",
                             "content": (
                                 f"[INTERNAL — DO NOT READ ALOUD OR RECAP] "
-                                f"Verdict: {verdict}. Just say 'Correct!' or 'Not quite.' "
-                                f"then announce the next word."
+                                f"Verdict: {verdict}. {say} "
+                                f"Do NOT add anything else."
                             ),
                         }
                         self._messages.append(result_msg)
                         logger.info(
-                            "SpellingVerifier: %s spelled='%s' target='%s'",
-                            verdict, spelled, target,
+                            "SpellingVerifier: %s spelled='%s' target='%s' next='%s'",
+                            verdict, spelled, target, next_word or 'LAST',
                         )
 
             await self.push_frame(frame, direction)
@@ -795,7 +822,7 @@ if PIPECAT_AVAILABLE:
                     "RESPONSE FORMAT — MANDATORY (you MUST follow this EXACTLY):\n"
                     "- Say ONLY one of these two patterns and NOTHING ELSE:\n"
                     "  Pattern A: 'Correct! Your next word is [word].'\n"
-                    "  Pattern B: 'Not quite. Your next word is [word].'\n"
+                    "  Pattern B: 'Not quite. The correct spelling is [word]. Your next word is [word].'\n"
                     "- NEVER add ANY additional text, explanation, or commentary.\n"
                     "- NEVER say 'That is correct', 'Great', 'Good job', 'Well done', "
                     "'The spelling is...', 'You spelled...', 'The child spelled...', "
@@ -813,7 +840,7 @@ if PIPECAT_AVAILABLE:
                     "- On repeat request: 'Your word is [same word].'\n"
                     "- On skip request: 'Your next word is [next word].'\n"
                     "- After the last word, if correct: 'Correct! All done!'\n"
-                    "- After the last word, if wrong: 'Not quite. All done!'\n"
+                    "- After the last word, if wrong: 'Not quite. The correct spelling is [word]. All done!'\n"
                     "- After saying 'All done!' ALWAYS check: if the child got ANY "
                     "words wrong during this session, AUTOMATICALLY start reviewing "
                     "by saying: 'Now let's review the words you missed. Your word is "
