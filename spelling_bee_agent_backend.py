@@ -118,6 +118,8 @@ session_progress = {}   # session_id: {current, incorrect, skipped}
 
 VLLM_VL_BASE = os.getenv("VLLM_VL_BASE", "http://vllm-nemotron-nano-vl-8b:5566/v1")
 VLLM_VL_MODEL = os.getenv("VLLM_VL_MODEL", "nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-FP8")
+VLLM_LLM_BASE = os.getenv("VLLM_LLM_BASE", "http://vllm-nemotron-nano-30b:5567/v1")
+VLLM_LLM_MODEL = os.getenv("VLLM_LLM_MODEL", "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8")
 NEMO_GUARDRAILS_CONFIG_PATH = os.getenv("NEMO_GUARDRAILS_CONFIG_PATH", "./guardrails")
 ENABLE_NEMO_GUARDRAILS = os.getenv("ENABLE_NEMO_GUARDRAILS", "true").lower() == "true"
 
@@ -246,6 +248,109 @@ if PIPECAT_AVAILABLE:
                 self._inject_if_needed(frame.text or "")
             await self.push_frame(frame, direction)
 
+    class SpellingVerifier(FrameProcessor):
+        """Pre-LLM processor that verifies spelling server-side.
+
+        - Strips ASR noise (parenthetical descriptions, dashes, trailing periods)
+        - Parses letter sequences like "J-O-U-R-N-Y" into "JOURNY"
+        - Compares to the current target word
+        - Injects a SPELLING RESULT system message so the LLM can trust the verdict
+        """
+
+        # Matches (parenthetical noise) like "(child speaking indistinctly)"
+        _NOISE_RE = re.compile(r'\([^)]*\)')
+        # Matches letter sequences: "J-O-U-R-N-E-Y" or "J O U R N E Y"
+        _LETTER_SEQ_RE = re.compile(
+            r'\b([A-Za-z])(?:\s*[-\s]\s*([A-Za-z])){2,}\b'
+        )
+        # Broader pattern: split on dash/space and check if all tokens are single letters
+        _DASH_SPLIT_RE = re.compile(r'[-\s]+')
+
+        def __init__(self, session_id: str, session_words: List[str],
+                     review_injector: "ReviewInjector", messages: list):
+            super().__init__()
+            self._session_id = session_id
+            self._session_words = [w.lower() for w in session_words]
+            self._review_injector = review_injector
+            self._messages = messages
+            self._review_index = 0
+
+        def _clean_text(self, text: str) -> str:
+            """Strip ASR noise from transcription text."""
+            cleaned = self._NOISE_RE.sub('', text)
+            # Remove leading dashes/bullets
+            cleaned = re.sub(r'^[\s\-\u2022]+', '', cleaned)
+            # Remove trailing periods that ASR adds
+            cleaned = cleaned.rstrip('. ')
+            return cleaned.strip()
+
+        def _extract_letters(self, text: str) -> Optional[str]:
+            """Extract letter sequence from text like 'J-O-U-R-N-E-Y' or 'J O U R N E Y'."""
+            cleaned = self._clean_text(text).upper()
+            if not cleaned:
+                return None
+
+            # Try splitting on dashes and/or spaces
+            tokens = self._DASH_SPLIT_RE.split(cleaned)
+            # Filter empty tokens
+            tokens = [t for t in tokens if t]
+
+            # Check if all tokens are single letters (the child spelled letter by letter)
+            if len(tokens) >= 2 and all(len(t) == 1 and t.isalpha() for t in tokens):
+                return ''.join(tokens)
+
+            return None
+
+        def _get_target_word(self) -> Optional[str]:
+            """Get the current target word based on how many words have been judged."""
+            if self._review_injector._injected:
+                # Review phase: get words from Redis
+                review_words = get_session_incorrect_words(self._session_id)
+                if review_words and self._review_index < len(review_words):
+                    return review_words[self._review_index].lower()
+                return None
+
+            idx = self._review_injector._words_judged
+            if idx < len(self._session_words):
+                return self._session_words[idx]
+            return None
+
+        def advance_review_index(self):
+            """Called when a review word is judged."""
+            self._review_index += 1
+
+        async def process_frame(self, frame: Frame, direction: FrameDirection):
+            await super().process_frame(frame, direction)
+
+            if isinstance(frame, TranscriptionFrame) and frame.text:
+                # Clean the transcription text for downstream processors
+                cleaned = self._clean_text(frame.text)
+                if cleaned != frame.text:
+                    frame.text = cleaned
+
+                # Try to extract a letter sequence and verify spelling
+                letters = self._extract_letters(cleaned)
+                if letters:
+                    target = self._get_target_word()
+                    if target:
+                        spelled = letters.upper()
+                        target_upper = target.upper()
+                        verdict = "CORRECT" if spelled == target_upper else "INCORRECT"
+                        result_msg = {
+                            "role": "system",
+                            "content": (
+                                f"SPELLING RESULT: The child spelled '{spelled}'. "
+                                f"Target: '{target}'. Verdict: {verdict}."
+                            ),
+                        }
+                        self._messages.append(result_msg)
+                        logger.info(
+                            "SpellingVerifier: %s spelled='%s' target='%s'",
+                            verdict, spelled, target,
+                        )
+
+            await self.push_frame(frame, direction)
+
     class IncorrectWordTracker(FrameProcessor):
         """Track incorrect words in Redis by monitoring LLM text output.
 
@@ -263,7 +368,8 @@ if PIPECAT_AVAILABLE:
         )
 
         def __init__(self, session_id: str, session_words: List[str],
-                     review_injector: Optional["ReviewInjector"] = None):
+                     review_injector: Optional["ReviewInjector"] = None,
+                     spelling_verifier: Optional["SpellingVerifier"] = None):
             super().__init__()
             self._session_id = session_id
             self._session_words = [w.lower() for w in session_words]
@@ -273,6 +379,7 @@ if PIPECAT_AVAILABLE:
             self._marked_incorrect = False
             self._judged = False  # whether current word has been judged
             self._review_injector = review_injector
+            self._spelling_verifier = spelling_verifier
 
         def _redis_add_incorrect(self, word: str):
             try:
@@ -296,6 +403,8 @@ if PIPECAT_AVAILABLE:
                     if not self._judged and self._review_injector:
                         self._judged = True
                         self._review_injector.notify_judgment()
+                        if self._spelling_verifier and self._review_injector._injected:
+                            self._spelling_verifier.advance_review_index()
 
                 # Detect correct judgment
                 if (self._CORRECT_RE.search(self._buffer) and
@@ -304,6 +413,8 @@ if PIPECAT_AVAILABLE:
                     self._judged = True
                     if self._review_injector:
                         self._review_injector.notify_judgment()
+                        if self._spelling_verifier and self._review_injector._injected:
+                            self._spelling_verifier.advance_review_index()
 
                 # Track which word is announced (updates current word for next round)
                 m = self._WORD_RE.search(self._buffer)
@@ -610,8 +721,8 @@ if PIPECAT_AVAILABLE:
 
         llm = NvidiaLLMService(
             api_key="not-needed",
-            base_url=os.getenv("NVIDIA_LLM_URL", VLLM_VL_BASE),
-            model=os.getenv("NVIDIA_LLM_MODEL", VLLM_VL_MODEL),
+            base_url=os.getenv("NVIDIA_LLM_URL", VLLM_LLM_BASE),
+            model=os.getenv("NVIDIA_LLM_MODEL", VLLM_LLM_MODEL),
         )
 
         stt = ElevenLabsRealtimeSTTService(
@@ -641,11 +752,11 @@ if PIPECAT_AVAILABLE:
                     "then present the next word. NEVER handle more than one word per turn. "
                     "NEVER generate content for multiple words at once.\n\n"
 
-                    "GREETING:"
+                    "GREETING:\n"
                     "- When the user says 'Start the spelling bee', say EXACTLY: "
-                    "'Hello! Welcome to spelling bee practice. Your first word is [first word].'"
+                    "'Hello! Welcome to spelling bee practice. Your first word is [first word].'\n"
                     "- When the user says 'Continue the spelling bee', say EXACTLY: "
-                    "'Welcome back! Let us continue our spelling bee practice. Your word is [current word].'"
+                    "'Welcome back! Let us continue our spelling bee practice. Your word is [current word].'\n\n"
 
                     "PRESENTING WORDS:\n"
                     "- Say ONLY the whole word. Example: 'Your word is elephant.'\n"
@@ -654,42 +765,13 @@ if PIPECAT_AVAILABLE:
                     "- NEVER repeat the correct spelling letter by letter for any reason.\n"
                     "- If the child asks for a sentence, give ONE short sentence using the word, "
                     "then repeat the word. NEVER give sentences for multiple words.\n"
-                    "- If the child asks for a definition or meaning, give ONE short child-friendly definition. Never list multiple meanings.\n\n"
+                    "- If the child asks for a definition or meaning, give ONE short "
+                    "child-friendly definition. Never list multiple meanings.\n\n"
 
-                    "UNDERSTANDING THE CHILD'S SPELLING:\n"
-                    "Speech recognition converts letter sounds into words. "
-                    "You MUST interpret these as individual letters:\n"
-                    "  'ay'=A, 'bee'/'be'=B, 'see'/'sea'/'cee'=C, 'dee'=D, 'ee'=E,\n"
-                    "  'ef'=F, 'gee'=G, 'aitch'/'age'/'each'=H, 'eye'/'i'=I, 'jay'=J,\n"
-                    "  'kay'=K, 'el'=L, 'em'=M, 'en'/'and'=N, 'oh'/'o'=O, 'pee'=P,\n"
-                    "  'cue'/'queue'=Q, 'are'/'our'=R, 'ess'=S, 'tee'=T, 'you'/'u'=U,\n"
-                    "  'vee'=V, 'double you'/'dub'=W, 'ex'=X, 'why'=Y, 'zee'/'zed'=Z.\n"
-                    "Also accept NATO phonetics: alpha=A, bravo=B, charlie=C, etc.\n"
-                    "When the child says letters, join them and compare to the target word.\n\n"
-                    "VERIFICATION PROCEDURE (follow this EVERY time):\n"
-                    "1. Convert each spoken sound to its letter using the table above.\n"
-                    "2. Join ALL letters into a single string.\n"
-                    "3. Compare the joined string to the target word CHARACTER BY CHARACTER.\n"
-                    "4. Count the letters: the joined string must have the SAME number of "
-                    "letters as the target word.\n"
-                    "5. If ANY letter is wrong, missing, or extra → say 'Not quite.'\n"
-                    "6. If EVERY letter matches exactly → say 'Correct!'\n"
-                    "When in DOUBT, say 'Not quite.' — never guess in the child's favor.\n\n"
-                    "STRICT MATCHING: The assembled letters must spell the word EXACTLY. "
-                    "Every letter must be present and in the correct order — no missing "
-                    "letters, no extra letters, no swapped letters. "
-                    "Example: 'u-m-b-r-e-l-a' for 'umbrella' is WRONG (missing second L). "
-                    "Only allow for ASR transcription errors where the SOUND of a letter "
-                    "was misheard (e.g. 'em' heard as 'and' for N, or 'bee' heard as 'be'). "
-                    "These sound-alike substitutions are OK, but wrong/missing/extra letters are NOT.\n"
-                    "Example: child says 'bee ee ay you tee eye ef you el' for 'beautiful' — "
-                    "join to B-E-A-U-T-I-F-U-L = 'beautiful' = Correct!\n"
-                    "Example: child says 'are ee el eye ee ef' for 'relief' — "
-                    "join to R-E-L-I-E-F = 'relief' = Correct!\n"
-                    "Example: child says 'you em bee are ee el ay' for 'umbrella' — "
-                    "join to U-M-B-R-E-L-A = 'umbrela' ≠ 'umbrella' = Not quite!\n"
-                    "IMPORTANT: Wait for the child to finish spelling before judging. "
-                    "A long pause (silence) means they are done.\n\n"
+                    "SPELLING VERIFICATION:\n"
+                    "You will receive SPELLING RESULT system messages with the verdict "
+                    "(CORRECT or INCORRECT). Trust and use these verdicts. "
+                    "Say 'Correct!' or 'Not quite.' accordingly.\n\n"
 
                     "RESPONSE FORMAT — CRITICAL RULES:\n"
                     "- Your response MUST start with EXACTLY 'Correct!' or 'Not quite.' — "
@@ -699,7 +781,6 @@ if PIPECAT_AVAILABLE:
                     "- VALID: 'Correct! Your next word is calendar.'\n"
                     "- VALID: 'Not quite. Your next word is calendar.'\n"
                     "- INVALID: 'Your next word is calendar.' (MISSING JUDGMENT!)\n"
-                    "- If you forget the judgment, the child gets NO feedback!\n"
                     "- NEVER provide example sentences, definitions, or extra commentary "
                     "unless the child explicitly asks.\n"
                     "- After announcing a word, STOP. Do NOT continue generating text. "
@@ -745,7 +826,8 @@ if PIPECAT_AVAILABLE:
         transcript_bridge = TranscriptBridge()
         user_transcript_bridge = UserTranscriptBridge()
         review_injector = ReviewInjector(session_id, word_count, messages)
-        incorrect_tracker = IncorrectWordTracker(session_id, session_words, review_injector)
+        spelling_verifier = SpellingVerifier(session_id, session_words, review_injector, messages)
+        incorrect_tracker = IncorrectWordTracker(session_id, session_words, review_injector, spelling_verifier)
 
         pipeline = Pipeline(
             [
@@ -754,6 +836,7 @@ if PIPECAT_AVAILABLE:
                 user_transcript_bridge,
                 stt_transcript_synchronization,
                 review_injector,
+                spelling_verifier,
                 context_aggregator.user(),
                 llm,
                 incorrect_tracker,

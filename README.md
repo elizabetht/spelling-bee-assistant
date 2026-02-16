@@ -166,7 +166,6 @@ Students upload a photo of their spelling word list, and the assistant extracts 
 pip install -r requirements.txt
 
 # Set required environment variables
-export NVIDIA_API_KEY=<your-key>          # For LLM (vLLM / NVIDIA Cloud)
 export ELEVENLABS_API_KEY=<your-key>      # For ElevenLabs ASR + TTS
 
 # Optional: enable guardrails
@@ -187,10 +186,6 @@ container registry at `localhost:32000`, and GPU nodes with the NVIDIA runtime.
 **1. Create secrets**
 
 ```bash
-# NVIDIA API key (required for NvidiaLLMService)
-kubectl -n spellingbee create secret generic nvidia-api-key \
-  --from-literal=api-key=<YOUR_KEY>
-
 # ElevenLabs API key (required for ASR + TTS)
 kubectl -n spellingbee create secret generic elevenlabs-api-key \
   --from-literal=api-key=<YOUR_ELEVENLABS_KEY>
@@ -218,12 +213,7 @@ Or deploy individually:
 > speech services is needed. Only the vLLM model requires a GPU.
 
 The backend script builds the Docker image, pushes it to the local registry,
-applies the K8s manifest, and waits for rollout. To create the NVIDIA API key
-secret in the same step:
-
-```bash
-CREATE_SECRET=true NVIDIA_API_KEY_VALUE=<key> ./deploy/deploy_backend.sh
-```
+applies the K8s manifest, and waits for rollout.
 
 **3. Verify**
 
@@ -274,7 +264,6 @@ spelling-bee-assistant/
 
 | Variable | Default | Description |
 |---|---|---|
-| `NVIDIA_API_KEY` | — | NVIDIA API key (required for LLM) |
 | `ELEVENLABS_API_KEY` | — | ElevenLabs API key (required for ASR + TTS) |
 | `ELEVENLABS_TTS_VOICE_ID` | `3vbrfmIQGJrswxh7ife4` | ElevenLabs TTS voice identifier |
 | `ENABLE_NEMO_GUARDRAILS` | `false` | Enable NeMo Guardrails |

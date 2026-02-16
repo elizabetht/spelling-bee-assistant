@@ -522,6 +522,16 @@ registerProcessor('capture-processor', CaptureProcessor);
     const scoreProgressEl = document.getElementById('scoreProgress');
     const speechBubbleText = document.getElementById('speechBubbleText');
 
+    // Strip ASR noise: (parenthetical descriptions), leading dashes/bullets
+    function cleanAsrText(text) {
+      if (!text) return text;
+      return text
+        .replace(/\([^)]*\)/g, '')       // remove (parenthetical noise)
+        .replace(/^[\s\-\u2022]+/, '')    // remove leading dashes/bullets
+        .replace(/\s+/g, ' ')            // collapse whitespace
+        .trim();
+    }
+
     function updateScoreUI() {
       const attempted = scoreCorrect + scoreIncorrect;
       if (practiceComplete) {
@@ -1007,12 +1017,12 @@ registerProcessor('capture-processor', CaptureProcessor);
               statusLabel.textContent = 'Listening...';
             }
           }
-          speechBubbleText.textContent = frame.text || '...';
+          speechBubbleText.textContent = cleanAsrText(frame.text) || '...';
           speechBubbleText.classList.remove('interim');
           if (!currentUserEntry) {
             currentUserEntry = addTranscriptEntry('user');
           }
-          updateTranscriptText(currentUserEntry, frame.text, false);
+          updateTranscriptText(currentUserEntry, cleanAsrText(frame.text), false);
           currentUserEntry = null;
         } else if (frame.type === 'text') {
           // Raw LLM tokens — ignore for display; tts_update handles transcript
@@ -1061,22 +1071,22 @@ registerProcessor('capture-processor', CaptureProcessor);
         // Interim user speech
         const interimText = msg.text || msg.data || '';
         console.log('[ASR] asr_update (interim):', JSON.stringify(interimText));
-        speechBubbleText.textContent = interimText || '...';
+        speechBubbleText.textContent = cleanAsrText(interimText) || '...';
         speechBubbleText.classList.add('interim');
         if (!currentUserEntry) {
           currentUserEntry = addTranscriptEntry('user');
         }
-        updateTranscriptText(currentUserEntry, interimText, true);
+        updateTranscriptText(currentUserEntry, cleanAsrText(interimText), true);
       } else if (type === 'asr_end') {
         // Final user speech
         const finalText = msg.text || msg.data || '';
         console.log('[ASR] asr_end (final):', JSON.stringify(finalText));
-        speechBubbleText.textContent = finalText || '...';
+        speechBubbleText.textContent = cleanAsrText(finalText) || '...';
         speechBubbleText.classList.remove('interim');
         if (!currentUserEntry) {
           currentUserEntry = addTranscriptEntry('user');
         }
-        updateTranscriptText(currentUserEntry, finalText, false);
+        updateTranscriptText(currentUserEntry, cleanAsrText(finalText), false);
         currentUserEntry = null;
       } else if (type === 'tts_update') {
         // Bot speaking — accumulate text for score parsing but do NOT display.
