@@ -189,50 +189,44 @@ if PIPECAT_AVAILABLE:
                 await self.push_frame(msg, direction)
             await self.push_frame(frame, direction)
 
-    class IncorrectWordTracker(FrameProcessor):
-        """Track incorrect words in Redis by monitoring LLM text output.
+    class ReviewInjector(FrameProcessor):
+        """Pre-LLM processor that injects the review word list before the LLM responds.
 
-        Watches TextFrames for "Not quite" (incorrect) responses and records
-        the PREVIOUS word (the one being quizzed) to a Redis set.
-        When review is triggered, injects the incorrect word list into the
-        LLM conversation context so the bot knows exactly which words to re-quiz.
+        Sits before the LLM in the pipeline. When a user TranscriptionFrame
+        arrives (child finished speaking), checks if review words should be
+        injected so the LLM has the list available when generating its response.
+        Triggers when the word count indicates all words have been quizzed,
+        or when the user says "review".
         """
 
-        _NOT_QUITE_RE = re.compile(r'\bnot\s+quite\b', re.IGNORECASE)
-        _ALL_DONE_RE = re.compile(r'\ball\s+done\b', re.IGNORECASE)
         _REVIEW_RE = re.compile(r'\breview\b', re.IGNORECASE)
-        _WORD_RE = re.compile(
-            r'(?:first|next|new|your)\s+(?:next\s+)?word\s+is[:\s]+["\']?(\w+)["\']?',
-            re.IGNORECASE,
-        )
 
-        def __init__(self, session_id: str, session_words: List[str], messages: list):
+        def __init__(self, session_id: str, word_count: int, messages: list):
             super().__init__()
             self._session_id = session_id
-            self._session_words = [w.lower() for w in session_words]
-            self._redis_key = f"spellingbee:session:{session_id}:incorrect"
-            self._current_word: Optional[str] = None
-            self._buffer = ""
-            self._marked_incorrect = False  # prevent double-saving same word
-            self._messages = messages  # reference to LLM context messages
-            self._review_injected = False
+            self._word_count = word_count
+            self._messages = messages
+            self._injected = False
+            self._words_judged = 0
 
-        def _redis_add_incorrect(self, word: str):
-            try:
-                redis_client.sadd(self._redis_key, word.lower())
-                redis_client.expire(self._redis_key, 60 * 60 * 24)
-                logger.info("Incorrect word '%s' saved to Redis for session %s", word, self._session_id)
-            except Exception as e:
-                logger.warning("Failed to save incorrect word to Redis: %s", e)
+        def notify_judgment(self):
+            """Called by IncorrectWordTracker when a correct/incorrect judgment is detected."""
+            self._words_judged += 1
 
-        def _inject_review_words(self):
-            """Inject incorrect words into LLM context so it knows what to re-quiz."""
-            if self._review_injected:
+        def _inject_if_needed(self, user_text: str = ""):
+            if self._injected:
+                return
+            # Inject if all words have been judged or user asks for review
+            should_inject = (
+                (self._words_judged >= self._word_count and self._word_count > 0) or
+                self._REVIEW_RE.search(user_text)
+            )
+            if not should_inject:
                 return
             incorrect = get_session_incorrect_words(self._session_id)
             if not incorrect:
                 return
-            self._review_injected = True
+            self._injected = True
             review_msg = {
                 "role": "system",
                 "content": (
@@ -244,7 +238,49 @@ if PIPECAT_AVAILABLE:
                 ),
             }
             self._messages.append(review_msg)
-            logger.info("Injected review words into context: %s", incorrect)
+            logger.info("ReviewInjector: injected review words into context: %s", incorrect)
+
+        async def process_frame(self, frame: Frame, direction: FrameDirection):
+            await super().process_frame(frame, direction)
+            if isinstance(frame, TranscriptionFrame):
+                self._inject_if_needed(frame.text or "")
+            await self.push_frame(frame, direction)
+
+    class IncorrectWordTracker(FrameProcessor):
+        """Track incorrect words in Redis by monitoring LLM text output.
+
+        Watches TextFrames for "Not quite" (incorrect) responses and records
+        the PREVIOUS word (the one being quizzed) to a Redis set.
+        Also notifies ReviewInjector of each judgment so it knows when all
+        words have been quizzed.
+        """
+
+        _NOT_QUITE_RE = re.compile(r'\bnot\s+quite\b', re.IGNORECASE)
+        _CORRECT_RE = re.compile(r'\bcorrect\b', re.IGNORECASE)
+        _WORD_RE = re.compile(
+            r'(?:first|next|new|your)\s+(?:next\s+)?word\s+is[:\s]+["\']?(\w+)["\']?',
+            re.IGNORECASE,
+        )
+
+        def __init__(self, session_id: str, session_words: List[str],
+                     review_injector: Optional["ReviewInjector"] = None):
+            super().__init__()
+            self._session_id = session_id
+            self._session_words = [w.lower() for w in session_words]
+            self._redis_key = f"spellingbee:session:{session_id}:incorrect"
+            self._current_word: Optional[str] = None
+            self._buffer = ""
+            self._marked_incorrect = False
+            self._judged = False  # whether current word has been judged
+            self._review_injector = review_injector
+
+        def _redis_add_incorrect(self, word: str):
+            try:
+                redis_client.sadd(self._redis_key, word.lower())
+                redis_client.expire(self._redis_key, 60 * 60 * 24)
+                logger.info("Incorrect word '%s' saved to Redis for session %s", word, self._session_id)
+            except Exception as e:
+                logger.warning("Failed to save incorrect word to Redis: %s", e)
 
         async def process_frame(self, frame: Frame, direction: FrameDirection):
             await super().process_frame(frame, direction)
@@ -257,6 +293,17 @@ if PIPECAT_AVAILABLE:
                 if self._NOT_QUITE_RE.search(self._buffer) and self._current_word and not self._marked_incorrect:
                     self._redis_add_incorrect(self._current_word)
                     self._marked_incorrect = True
+                    if not self._judged and self._review_injector:
+                        self._judged = True
+                        self._review_injector.notify_judgment()
+
+                # Detect correct judgment
+                if (self._CORRECT_RE.search(self._buffer) and
+                        not self._NOT_QUITE_RE.search(self._buffer) and
+                        not self._judged and self._current_word):
+                    self._judged = True
+                    if self._review_injector:
+                        self._review_injector.notify_judgment()
 
                 # Track which word is announced (updates current word for next round)
                 m = self._WORD_RE.search(self._buffer)
@@ -264,12 +311,8 @@ if PIPECAT_AVAILABLE:
                     new_word = m.group(1).lower()
                     if new_word != self._current_word:
                         self._current_word = new_word
-                        self._marked_incorrect = False  # reset for new word
-
-                # Detect review trigger — inject incorrect words into context
-                if (self._ALL_DONE_RE.search(self._buffer) or
-                        self._REVIEW_RE.search(self._buffer)):
-                    self._inject_review_words()
+                        self._marked_incorrect = False
+                        self._judged = False  # reset for new word
 
             elif isinstance(frame, BotStoppedSpeakingFrame):
                 # Reset buffer between bot utterances
@@ -700,7 +743,8 @@ if PIPECAT_AVAILABLE:
         md_stripper = MarkdownStripper()
         transcript_bridge = TranscriptBridge()
         user_transcript_bridge = UserTranscriptBridge()
-        incorrect_tracker = IncorrectWordTracker(session_id, session_words, messages)
+        review_injector = ReviewInjector(session_id, word_count, messages)
+        incorrect_tracker = IncorrectWordTracker(session_id, session_words, review_injector)
 
         pipeline = Pipeline(
             [
@@ -708,6 +752,7 @@ if PIPECAT_AVAILABLE:
                 stt,
                 user_transcript_bridge,
                 stt_transcript_synchronization,
+                review_injector,
                 context_aggregator.user(),
                 llm,
                 incorrect_tracker,
