@@ -520,7 +520,7 @@ registerProcessor('capture-processor', CaptureProcessor);
 
       // Detect current word — match many announcement patterns
       const wordPatterns = [
-        /(?:first|next|new|your)\s+word\s+is[:\s]+["']?(\w+)["']?/i,
+        /(?:first|next|new|your)\s+(?:next\s+)?word\s+is[:\s]+["']?(\w+)["']?/i,
         /\bthe\s+word\s+is[:\s]+["']?(\w+)["']?/i,
         /\bspell(?:\s+the\s+word)?[:\s]+["']?(\w+)["']?/i,
         /\bhere(?:'s|\s+is)\s+(?:your\s+)?(?:next\s+)?word[:\s]+["']?(\w+)["']?/i,
