@@ -129,7 +129,6 @@ if PIPECAT_AVAILABLE:
         _MARKDOWN_RE = re.compile(r'[*_~`#]+')
 
         async def process_frame(self, frame: Frame, direction: FrameDirection):
-            await super().process_frame(frame, direction)
             if isinstance(frame, TextFrame) and frame.text:
                 cleaned = self._MARKDOWN_RE.sub('', frame.text)
                 frame.text = cleaned
@@ -177,7 +176,11 @@ def initialize_nemo_guardrails() -> None:
         return
 
     try:
-        rails_config = RailsConfig.from_path(str(config_path))
+        # Read config and resolve env-var placeholders that NeMo doesn't expand
+        raw_yaml = (config_path / "config.yml").read_text()
+        resolved_model = os.getenv("NVIDIA_LLM_MODEL", VLLM_VL_MODEL)
+        raw_yaml = raw_yaml.replace("__NVIDIA_LLM_MODEL__", resolved_model)
+        rails_config = RailsConfig.from_content(yaml_content=raw_yaml, config_path=str(config_path))
         NEMO_RAILS = LLMRails(rails_config)
     except Exception as e:
         logger.warning("NeMo Guardrails init failed: %s", e)
