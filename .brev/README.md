@@ -5,6 +5,9 @@ This directory contains the configuration files required to launch the Spelling 
 ## Files
 
 - **setup.sh** - Automated setup script that installs dependencies and prepares the environment
+- **validate.py** - Configuration validator to check if your setup is ready for Brev
+- **QUICKSTART.md** - Step-by-step guide for launching with Brev
+- **launch-example.yaml** - Example configuration for customizing your deployment
 - **(parent) .brev.yaml** - Main Brev configuration file with app metadata and requirements
 
 ## What is Brev?
@@ -49,6 +52,9 @@ Before launching, ensure you have:
 If you want to test the setup locally:
 
 ```bash
+# Validate your configuration first
+python3 .brev/validate.py
+
 # Run the setup script
 bash .brev/setup.sh
 
