@@ -72,7 +72,6 @@ try:
 
     # NVIDIA Riva ASR (self-hosted or cloud)
     from nvidia_pipecat.services.riva_speech import RivaSpeechService
-    # Cloud-hosted TTS (ElevenLabs) - keeping TTS unchanged per requirements
     from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 
     # Patch: protobuf serializer uses exact type matching, so TTSAudioRawFrame
@@ -945,10 +944,9 @@ if PIPECAT_AVAILABLE:
         stt = RivaSpeechService(
             server_url=os.getenv("RIVA_SERVER_URL", "grpc://localhost:50051"),
             sample_rate=16000,
-            # Children pause 2-3s between letters when spelling aloud.
-            # Increased silence threshold to ensure the child finishes spelling
-            # before the transcript is finalized.
-            vad_silence_threshold_ms=4000,  # 4.0 seconds in milliseconds
+            # Children pause 2-3s between letters when spelling aloud,
+            # so 4-second silence threshold prevents premature transcript finalization.
+            vad_silence_threshold_ms=4000,
             language_code=os.getenv("RIVA_LANGUAGE_CODE", "en-US"),
             auth_token=os.getenv("RIVA_AUTH_TOKEN"),  # Optional, for cloud deployments
         )
