@@ -178,6 +178,53 @@ python spelling_bee_agent_backend.py
 
 Open `http://localhost:8080` to access the test UI.
 
+## Launch with Brev
+
+The easiest way to deploy this application is using **Brev**, NVIDIA's platform for launching AI applications.
+
+**Prerequisites:**
+- Brev account and CLI installed
+- ElevenLabs API key
+
+**Launch Steps:**
+
+1. **Clone the repository** (if not already done):
+   ```bash
+   git clone https://github.com/elizabetht/spelling-bee-assistant.git
+   cd spelling-bee-assistant
+   ```
+
+2. **Set your ElevenLabs API key**:
+   ```bash
+   brev secret set ELEVENLABS_API_KEY=your-key-here
+   ```
+
+3. **Launch the application**:
+   ```bash
+   brev launch
+   ```
+   
+   Or via the Brev dashboard:
+   - Navigate to your Brev dashboard
+   - Click "New Launch"
+   - Select this repository
+   - Configure the `ELEVENLABS_API_KEY` secret
+   - Click "Launch"
+
+4. **Access your application**:
+   - Brev will provide a URL (typically `https://your-app.brev.dev`)
+   - Open the URL in your browser to access the spelling bee assistant
+   - Upload a word list image to start a session
+
+**Configuration Options:**
+
+All optional environment variables can be set via Brev secrets or the `.brev.yaml` configuration:
+- `VLLM_VL_BASE` - Custom vLLM endpoint (default: auto-configured)
+- `ENABLE_NEMO_GUARDRAILS` - Enable content safety (default: `false`)
+- `REDIS_URL` - Custom Redis URL (default: uses Brev-managed Redis)
+
+For more details, see [.brev/README.md](.brev/README.md).
+
 ## Deploy to Kubernetes
 
 Pre-requisites: a microk8s cluster with the `spellingbee` namespace, a local

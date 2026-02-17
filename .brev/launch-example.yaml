@@ -1,0 +1,41 @@
+# Brev Launch Example Configuration
+
+# This file demonstrates how to launch the Spelling Bee Assistant with Brev
+# Copy and customize this file for your deployment
+
+# Application name (will be visible in Brev dashboard)
+name: spelling-bee-assistant
+
+# Environment configuration
+environment:
+  # Required: Your ElevenLabs API key
+  # Get it from: https://elevenlabs.io/
+  ELEVENLABS_API_KEY: ""  # Set via: brev secret set ELEVENLABS_API_KEY=your-key
+  
+  # Optional: Custom voice ID
+  # ELEVENLABS_TTS_VOICE_ID: "3vbrfmIQGJrswxh7ife4"
+  
+  # Optional: Enable guardrails for content safety
+  # ENABLE_NEMO_GUARDRAILS: "true"
+  
+  # Optional: Custom vLLM endpoint
+  # VLLM_VL_BASE: "http://your-vllm-service:5566/v1"
+
+# Resource allocation
+resources:
+  cpu: 2
+  memory: 4Gi
+  
+# Note: GPU is not required for the main application
+# GPU is only needed if you're hosting the vLLM model yourself
+
+# Auto-scaling (optional)
+# autoscaling:
+#   min_instances: 1
+#   max_instances: 3
+#   target_cpu: 70
+
+# Health check configuration
+health_check:
+  path: /healthz
+  interval: 30s
