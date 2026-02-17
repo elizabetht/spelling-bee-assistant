@@ -12,10 +12,14 @@ import yaml
 from pathlib import Path
 
 class Colors:
-    GREEN = '\033[92m'
-    RED = '\033[91m'
-    YELLOW = '\033[93m'
-    RESET = '\033[0m'
+    """ANSI color codes for terminal output"""
+    # Check if we're on a terminal that supports colors
+    _use_colors = sys.stdout.isatty() and os.name != 'nt'
+    
+    GREEN = '\033[92m' if _use_colors else ''
+    RED = '\033[91m' if _use_colors else ''
+    YELLOW = '\033[93m' if _use_colors else ''
+    RESET = '\033[0m' if _use_colors else ''
 
 def check_mark(success):
     return f"{Colors.GREEN}✓{Colors.RESET}" if success else f"{Colors.RED}✗{Colors.RESET}"

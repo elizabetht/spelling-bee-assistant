@@ -149,7 +149,7 @@ brev restart
 
 ## Support
 
-- **Brev Platform Issues**: [Brev Documentation](https://docs.nvidia.com/brev/) or Brev support
+- **Brev Platform Issues**: Consult your Brev platform documentation or Brev support
 - **Application Issues**: [GitHub Issues](https://github.com/elizabetht/spelling-bee-assistant/issues)
 - **Main Documentation**: [README.md](../README.md)
 

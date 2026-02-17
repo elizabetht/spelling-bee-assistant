@@ -8,10 +8,15 @@ echo "=== Brev Setup: Spelling Bee Assistant ==="
 
 # Check Python version
 echo "Checking Python version..."
-PYTHON_VERSION=$(python --version 2>&1 | awk '{print $2}')
+PYTHON_CMD="python3"
+if ! command -v python3 &> /dev/null; then
+    PYTHON_CMD="python"
+fi
+
+PYTHON_VERSION=$($PYTHON_CMD --version 2>&1 | awk '{print $2}')
 echo "Python version: $PYTHON_VERSION"
 
-if ! python -c "import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)"; then
+if ! $PYTHON_CMD -c "import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)"; then
     echo "ERROR: Python 3.12+ is required (found $PYTHON_VERSION)"
     exit 1
 fi
@@ -40,7 +45,7 @@ pip install --force-reinstall --no-deps "pipecat-ai[elevenlabs]>=0.0.100" --quie
 
 # Apply nvidia-pipecat patches
 echo "Applying nvidia-pipecat compatibility patches..."
-NVPC=$(python -c "import nvidia_pipecat; import os; print(os.path.dirname(nvidia_pipecat.__file__))" 2>/dev/null || echo "")
+NVPC=$($PYTHON_CMD -c "import nvidia_pipecat; import os; print(os.path.dirname(nvidia_pipecat.__file__))" 2>/dev/null || echo "")
 
 if [[ -n "${NVPC}" ]] && [[ -d "${NVPC}" ]]; then
     # Patch 1: Fix import statement
@@ -53,7 +58,7 @@ if [[ -n "${NVPC}" ]] && [[ -d "${NVPC}" ]]; then
     
     # Patch 3: Apply custom patch script
     if [[ -f "patch_nvidia_pipecat.py" ]]; then
-        python patch_nvidia_pipecat.py "${NVPC}" || true
+        $PYTHON_CMD patch_nvidia_pipecat.py "${NVPC}" || true
     fi
     
     echo "Patches applied successfully"
@@ -63,15 +68,15 @@ fi
 
 # Verify installation
 echo "Verifying installation..."
-python -c "import fastapi; print('✓ FastAPI installed')"
-python -c "import uvicorn; print('✓ Uvicorn installed')"
-python -c "import redis; print('✓ Redis client installed')"
-python -c "import elevenlabs; print('✓ ElevenLabs SDK installed')"
+$PYTHON_CMD -c "import fastapi; print('✓ FastAPI installed')"
+$PYTHON_CMD -c "import uvicorn; print('✓ Uvicorn installed')"
+$PYTHON_CMD -c "import redis; print('✓ Redis client installed')"
+$PYTHON_CMD -c "import elevenlabs; print('✓ ElevenLabs SDK installed')"
 
 # Check optional dependencies
-python -c "import pipecat; print('✓ Pipecat installed')" 2>/dev/null || echo "⚠ Pipecat not available"
-python -c "import nvidia_pipecat; print('✓ NVIDIA Pipecat installed')" 2>/dev/null || echo "⚠ NVIDIA Pipecat not available"
-python -c "import nemoguardrails; print('✓ NeMo Guardrails installed')" 2>/dev/null || echo "⚠ NeMo Guardrails not available"
+$PYTHON_CMD -c "import pipecat; print('✓ Pipecat installed')" 2>/dev/null || echo "⚠ Pipecat not available"
+$PYTHON_CMD -c "import nvidia_pipecat; print('✓ NVIDIA Pipecat installed')" 2>/dev/null || echo "⚠ NVIDIA Pipecat not available"
+$PYTHON_CMD -c "import nemoguardrails; print('✓ NeMo Guardrails installed')" 2>/dev/null || echo "⚠ NeMo Guardrails not available"
 
 echo ""
 echo "=== Setup Complete ==="
@@ -84,4 +89,4 @@ echo "  - REDIS_URL: Redis connection (default: redis://localhost:6379/0)"
 echo "  - VLLM_VL_BASE: vLLM endpoint (default: http://vllm-nemotron-nano-vl-8b:5566/v1)"
 echo "  - ENABLE_NEMO_GUARDRAILS: Enable guardrails (default: false)"
 echo ""
-echo "Ready to start with: python spelling_bee_agent_backend.py"
+echo "Ready to start with: $PYTHON_CMD spelling_bee_agent_backend.py"
