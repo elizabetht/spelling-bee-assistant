@@ -32,6 +32,10 @@ spec:
               value: "true"
             - name: NEMO_GUARDRAILS_CONFIG_PATH
               value: "/app/guardrails"
+            - name: RIVA_SERVER_URL
+              value: "grpc://riva-speech:50051"
+            - name: RIVA_LANGUAGE_CODE
+              value: "en-US"
             - name: ELEVENLABS_API_KEY
               valueFrom:
                 secretKeyRef:

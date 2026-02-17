@@ -32,7 +32,7 @@ One click starts a real-time voice session over WebSocket. The **NVIDIA Pipecat 
 
 1. The AI coach announces: *"Your first word is 'journey.' Would you like a sentence or definition?"*
 2. The child responds naturally — *"Can I hear it in a sentence?"*
-3. **ElevenLabs Scribe** (streaming speech-to-text) transcribes the child's voice in real time
+3. **NVIDIA Riva ASR** (streaming speech-to-text) transcribes the child's voice in real time
 4. The transcription flows through a **server-side spelling verifier** that parses letter sequences (e.g. "J-O-U-R-N-E-Y") and determines correctness deterministically
 5. **NeMo Guardrails** enforce child-safe, on-topic conversation — the LLM won't discuss anything outside spelling practice
 6. **Nemotron-Nano** generates a warm, contextual response with the verdict
@@ -51,6 +51,7 @@ The browser UI shows a live score bar: round number, correct/incorrect counts, a
 | Technology | Role in the App |
 |---|---|
 | **NVIDIA Pipecat (ACE)** | Real-time voice agent pipeline framework — orchestrates the full audio-in → ASR → LLM → TTS → audio-out loop with sub-second latency |
+| **NVIDIA Riva ASR** | Streaming speech-to-text with low latency — optimized for real-time voice transcription |
 | **Nemotron-Nano-12B-VL-FP8** | Dual-purpose vision-language model: (1) extracts spelling words from uploaded images, (2) powers the conversational spelling coach — both served from a single self-hosted vLLM instance |
 | **NeMo Guardrails** | Programmable safety rails that enforce child-appropriate, spelling-only conversation — blocks off-topic requests and ensures age-appropriate content |
 | **NVIDIA Container Runtime** | GPU-accelerated container execution on Kubernetes for the vLLM model serving pod |
@@ -63,7 +64,6 @@ The browser UI shows a live score bar: round number, correct/incorrect counts, a
 | Technology | Role |
 |---|---|
 | **vLLM** | High-throughput model serving with FP8 quantization on GB10 |
-| **ElevenLabs Scribe (STT)** | Streaming speech-to-text for real-time child voice transcription |
 | **ElevenLabs TTS** | Natural, friendly voice synthesis for the AI coach |
 | **FastAPI + WebSocket** | Low-latency backend for REST image upload and real-time audio transport |
 | **Redis** | Session state: word lists, progress, incorrect word tracking (24h TTL) |

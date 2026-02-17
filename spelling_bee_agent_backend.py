@@ -70,8 +70,8 @@ try:
         router as websocket_router,
     )
 
-    # Cloud-hosted ASR + TTS (ElevenLabs)
-    from pipecat.services.elevenlabs.stt import ElevenLabsRealtimeSTTService
+    # NVIDIA Riva ASR (self-hosted or cloud)
+    from nvidia_pipecat.services.riva_speech import RivaSpeechService
     from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 
     # Patch: protobuf serializer uses exact type matching, so TTSAudioRawFrame
@@ -941,16 +941,14 @@ if PIPECAT_AVAILABLE:
             ),
         )
 
-        stt = ElevenLabsRealtimeSTTService(
-            api_key=os.getenv("ELEVENLABS_API_KEY"),
+        stt = RivaSpeechService(
+            server_url=os.getenv("RIVA_SERVER_URL", "grpc://localhost:50051"),
             sample_rate=16000,
-            params=ElevenLabsRealtimeSTTService.InputParams(
-                language_code="eng",
-                # Children pause 2-3s between letters when spelling aloud.
-                # Default 1.5s finalizes the transcript too early, causing the
-                # LLM to respond before the child finishes spelling.
-                vad_silence_threshold_secs=4.0,
-            ),
+            # Children pause 2-3s between letters when spelling aloud,
+            # so 4-second silence threshold prevents premature transcript finalization.
+            vad_silence_threshold_ms=4000,
+            language_code=os.getenv("RIVA_LANGUAGE_CODE", "en-US"),
+            auth_token=os.getenv("RIVA_AUTH_TOKEN"),  # Optional, for cloud deployments
         )
 
         tts = ElevenLabsTTSService(
