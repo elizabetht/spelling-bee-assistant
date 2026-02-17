@@ -70,9 +70,9 @@ try:
         router as websocket_router,
     )
 
-    # Cloud-hosted ASR + TTS (ElevenLabs)
+    # Cloud-hosted ASR (ElevenLabs) and TTS (NVIDIA MagpieTTS)
     from pipecat.services.elevenlabs.stt import ElevenLabsRealtimeSTTService
-    from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
+    from pipecat.services.nvidia.tts import NvidiaTTSService
 
     # Patch: protobuf serializer uses exact type matching, so TTSAudioRawFrame
     # (subclass of OutputAudioRawFrame) gets silently dropped. Register it.
@@ -953,11 +953,16 @@ if PIPECAT_AVAILABLE:
             ),
         )
 
-        tts = ElevenLabsTTSService(
-            api_key=os.getenv("ELEVENLABS_API_KEY"),
-            voice_id=os.getenv("ELEVENLABS_TTS_VOICE_ID", "3vbrfmIQGJrswxh7ife4"),
-            model="eleven_turbo_v2_5",
+        tts = NvidiaTTSService(
+            api_key=os.getenv("NVIDIA_API_KEY"),
+            server=os.getenv("NVIDIA_TTS_SERVER", "grpc.nvcf.nvidia.com:443"),
+            voice_id=os.getenv("NVIDIA_TTS_VOICE_ID", "Magpie-Multilingual.EN-US.Aria"),
             sample_rate=16000,
+            model_function_map={
+                "function_id": os.getenv("NVIDIA_TTS_FUNCTION_ID", "877104f7-e885-42b9-8de8-f6e4c6303969"),
+                "model_name": "magpie-tts-multilingual",
+            },
+            params=NvidiaTTSService.InputParams(),
         )
 
         stt_transcript_synchronization = UserTranscriptSynchronization()

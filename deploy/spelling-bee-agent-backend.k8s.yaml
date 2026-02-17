@@ -37,6 +37,11 @@ spec:
                 secretKeyRef:
                   name: elevenlabs-api-key
                   key: api-key
+            - name: NVIDIA_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nvidia-api-key
+                  key: api-key
           readinessProbe:
             tcpSocket:
               port: 8080
