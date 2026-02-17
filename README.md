@@ -28,8 +28,8 @@ Students upload a photo of their spelling word list, and the assistant extracts 
 │   │  1. Decode image   │         │  Pipecat ACE Pipeline            │     │
 │   │  2. Extract words  │         │  ┌─────────────────────────────┐ │     │
 │   │     via VLM        │         │  │                             │ │     │
-│   │  3. Store in Redis │         │  │  Audio In ──► ElevenLabs   │ │     │
-│   │  4. Return         │         │  │              ASR (Scribe)   │ │     │
+│   │  3. Store in Redis │         │  │  Audio In ──► NVIDIA Riva  │ │     │
+│   │  4. Return         │         │  │              ASR            │ │     │
 │   │     session_id     │         │  │                 ▼            │ │     │
 │   │                    │         │  │         NeMo Guardrails      │ │     │
 │   └────────┬───────────┘         │  │                 │            │ │     │
@@ -58,12 +58,12 @@ Students upload a photo of their spelling word list, and the assistant extracts 
 │                          NVIDIA AI Services                                │
 │                                                                            │
 │   ┌───────────────────────────┐  ┌──────────────┐  ┌──────────────────┐  │
-│   │  Nemotron-Nano-12B-VL-FP8│  │ ElevenLabs   │  │ ElevenLabs TTS   │  │
-│   │  (vLLM, self-hosted)     │  │ STT (Scribe) │  │ (Cloud API)      │  │
-│   │                          │  │ (cloud API)  │  │                  │  │
-│   │  Image → Words           │  │ Speech →     │  │  Text → Speech   │  │
-│   │  Definitions / Sentences │  │ Text         │  │  16kHz PCM       │  │
-│   │  Voice Coach LLM         │  │              │  │                  │  │
+│   │  Nemotron-Nano-12B-VL-FP8│  │ NVIDIA Riva  │  │ ElevenLabs TTS   │  │
+│   │  (vLLM, self-hosted)     │  │ ASR          │  │ (Cloud API)      │  │
+│   │                          │  │ (self-hosted │  │                  │  │
+│   │  Image → Words           │  │  or cloud)   │  │  Text → Speech   │  │
+│   │  Definitions / Sentences │  │ Speech →     │  │  16kHz PCM       │  │
+│   │  Voice Coach LLM         │  │ Text         │  │                  │  │
 │   └───────────────────────────┘  └──────────────┘  └──────────────────┘  │
 │                                                                            │
 │   ┌──────────────────────────────────────────────────────────────────┐  │
@@ -79,7 +79,7 @@ Students upload a photo of their spelling word list, and the assistant extracts 
 |---|---|---|
 | **Voice Pipeline** | NVIDIA Pipecat (ACE) | Orchestrates real-time audio I/O, ASR, LLM, and TTS |
 | **Vision-Language Model** | Nemotron-Nano-12B-VL-FP8 via vLLM | Extracts spelling words from uploaded images |
-| **Speech Recognition** | ElevenLabs STT (Scribe, cloud API) | Streaming speech-to-text via WebSocket |
+| **Speech Recognition** | NVIDIA Riva ASR (self-hosted or cloud) | Streaming speech-to-text with low latency |
 | **Text-to-Speech** | ElevenLabs TTS (Cloud API) | Natural voice output at 16kHz |
 | **Conversational LLM** | Nemotron-Nano-12B-VL-FP8 via vLLM | Powers the interactive spelling coach (same model as VLM) |
 | **Safety** | NeMo Guardrails | Enforces spelling-only scope, filters off-topic intent |
@@ -142,16 +142,16 @@ Students upload a photo of their spelling word list, and the assistant extracts 
 │                                              │   └────────────────┘ │ │
 │                                              └──────────────────────┘ │
 │                                                                      │
-│   External (Cloud APIs):                                             │
-│     • ElevenLabs ASR  → api.elevenlabs.io (Scribe v1)                │
-│     • ElevenLabs TTS  → api.elevenlabs.io (Cloud API)                │
+│   External Services:                                                 │
+│     • NVIDIA Riva ASR  → Self-hosted or cloud gRPC endpoint          │
+│     • ElevenLabs TTS   → api.elevenlabs.io (Cloud API)               │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
 ## NVIDIA Technologies Used
 
 - **NVIDIA Pipecat (ACE)** — Real-time voice agent pipeline framework
-- **ElevenLabs STT (Scribe)** — Cloud-hosted streaming speech-to-text (WebSocket API)
+- **NVIDIA Riva ASR** — Self-hosted or cloud streaming speech-to-text with low latency
 - **ElevenLabs TTS** — Cloud-hosted text-to-speech (Cloud API)
 - **Nemotron-Nano-12B-VL-FP8** — Vision-language model for image understanding and conversational coaching, served via vLLM
 - **NeMo Guardrails** — Programmable safety rails for topic enforcement and content filtering
@@ -166,7 +166,11 @@ Students upload a photo of their spelling word list, and the assistant extracts 
 pip install -r requirements.txt
 
 # Set required environment variables
-export ELEVENLABS_API_KEY=<your-key>      # For ElevenLabs ASR + TTS
+export RIVA_SERVER_URL=grpc://localhost:50051  # For NVIDIA Riva ASR
+export ELEVENLABS_API_KEY=<your-key>           # For ElevenLabs TTS
+
+# Optional: Riva cloud authentication (if using cloud deployment)
+export RIVA_AUTH_TOKEN=<your-token>
 
 # Optional: enable guardrails
 export ENABLE_NEMO_GUARDRAILS=true
@@ -186,7 +190,7 @@ container registry at `localhost:32000`, and GPU nodes with the NVIDIA runtime.
 **1. Create secrets**
 
 ```bash
-# ElevenLabs API key (required for ASR + TTS)
+# ElevenLabs API key (required for TTS only)
 kubectl -n spellingbee create secret generic elevenlabs-api-key \
   --from-literal=api-key=<YOUR_ELEVENLABS_KEY>
 
@@ -195,7 +199,11 @@ kubectl -n spellingbee create secret generic hf-token \
   --from-literal=token=<YOUR_HF_TOKEN>
 ```
 
-**2. Deploy everything (model + Redis + backend)**
+**2. Deploy NVIDIA Riva ASR**
+
+Deploy Riva Speech services for ASR (speech-to-text). Refer to [NVIDIA Riva documentation](https://docs.nvidia.com/deeplearning/riva/user-guide/docs/quick-start-guide.html) for deployment instructions.
+
+**3. Deploy everything (model + Redis + backend)**
 
 ```bash
 ./deploy/deploy_all.sh
@@ -209,8 +217,8 @@ Or deploy individually:
 ./deploy/deploy_backend.sh    # FastAPI backend on controller node
 ```
 
-> **Note:** ASR and TTS are cloud-hosted via ElevenLabs, so no GPU pod for
-> speech services is needed. Only the vLLM model requires a GPU.
+> **Note:** NVIDIA Riva ASR is self-hosted or cloud-based (see step 2 above). 
+> ElevenLabs TTS is cloud-hosted. Only the vLLM model requires local GPU resources.
 
 The backend script builds the Docker image, pushes it to the local registry,
 applies the K8s manifest, and waits for rollout.
@@ -264,7 +272,10 @@ spelling-bee-assistant/
 
 | Variable | Default | Description |
 |---|---|---|
-| `ELEVENLABS_API_KEY` | — | ElevenLabs API key (required for ASR + TTS) |
+| `RIVA_SERVER_URL` | `grpc://localhost:50051` | NVIDIA Riva ASR server URL |
+| `RIVA_LANGUAGE_CODE` | `en-US` | Language code for Riva ASR |
+| `RIVA_AUTH_TOKEN` | — | Optional authentication token for Riva cloud deployments |
+| `ELEVENLABS_API_KEY` | — | ElevenLabs API key (required for TTS only) |
 | `ELEVENLABS_TTS_VOICE_ID` | `3vbrfmIQGJrswxh7ife4` | ElevenLabs TTS voice identifier |
 | `ENABLE_NEMO_GUARDRAILS` | `false` | Enable NeMo Guardrails |
 | `NEMO_GUARDRAILS_CONFIG_PATH` | `./guardrails` | Path to guardrails config |
