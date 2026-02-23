@@ -822,7 +822,7 @@ def extract_words_from_image(image_bytes) -> List[str]:
     ]
 
     try:
-        vl_text = _post_vllm_chat(vl_messages, max_tokens=600, temperature=0.0)
+        vl_text = _post_vllm_chat(vl_messages, max_tokens=2048, temperature=0.0)
         words = _parse_word_list(vl_text)
         if words:
             return words
@@ -969,8 +969,8 @@ if PIPECAT_AVAILABLE:
                 audio_out_enabled=True,
                 vad_analyzer=SileroVADAnalyzer(
                     params=VADParams(
-                        confidence=0.7,
-                        min_volume=0.3,
+                        confidence=0.85,
+                        min_volume=0.6,
                         start_secs=0.3,
                         stop_secs=1.6,  # 5s silence → child is done spelling
                     )
@@ -1005,8 +1005,8 @@ if PIPECAT_AVAILABLE:
             language_code="eng",
             commit_strategy="vad",
             vad_silence_threshold_secs=2.5,   # must be 0.3–3.0
-            vad_threshold=0.35,
-            min_speech_duration_ms=80,
+            vad_threshold=0.55,
+            min_speech_duration_ms=200,
             min_silence_duration_ms=120,
         )
 
