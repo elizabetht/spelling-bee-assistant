@@ -804,22 +804,27 @@ def extract_words_from_image(image_bytes) -> List[str]:
     if not raw:
         return []
 
+    # Detect actual MIME type so the model receives valid image data
+    import filetype as _ft
+    kind = _ft.guess(raw)
+    mime = kind.mime if kind else "image/jpeg"
+
     image_b64 = base64.b64encode(raw).decode("utf-8")
     vl_messages = [
         {
             "role": "system",
             "content": (
-                "Extract only spelling words from the image. "
-                "Return plain text with one single word per line and no numbering."
+                "You are a helpful OCR assistant. "
+                "List every word visible in the image, one word per line, with no numbering or extra text."
             ),
         },
         {
             "role": "user",
             "content": [
-                {"type": "text", "text": "Read this image and return only the spelling words."},
+                {"type": "text", "text": "Please list all the words you can see in this image, one per line."},
                 {
                     "type": "image_url",
-                    "image_url": {"url": f"data:image/png;base64,{image_b64}"},
+                    "image_url": {"url": f"data:{mime};base64,{image_b64}"},
                 },
             ],
         },
@@ -827,11 +832,13 @@ def extract_words_from_image(image_bytes) -> List[str]:
 
     try:
         vl_text = _post_vllm_chat(vl_messages, max_tokens=2048, temperature=0.0)
+        logger.info("VL model raw response: %r", vl_text[:500])
         words = _parse_word_list(vl_text)
+        logger.info("VL model parsed %d words: %s", len(words), words[:10])
         if words:
             return words
-    except (error.URLError, error.HTTPError, KeyError, IndexError, TimeoutError, json.JSONDecodeError):
-        pass
+    except Exception as e:
+        logger.warning("VL model OCR failed: %s: %s", type(e).__name__, e)
 
     image_bytes.seek(0)
     image = Image.open(image_bytes)
