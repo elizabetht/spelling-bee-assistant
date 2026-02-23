@@ -773,10 +773,14 @@ def _post_vllm_chat(messages: list[dict], max_tokens: int = 256, temperature: fl
         "temperature": temperature,
     }
     body = json.dumps(payload).encode("utf-8")
+    api_key = os.getenv("OPENAI_API_KEY", "")
     req = request.Request(
         f"{VLLM_VL_BASE}/chat/completions",
         data=body,
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
         method="POST",
     )
     with request.urlopen(req, timeout=45) as response:
