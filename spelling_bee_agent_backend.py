@@ -87,6 +87,7 @@ except ImportError:
 
 import logging
 from loguru import logger as _loguru_logger
+import re
 
 logging.getLogger("pipecat.serializers.protobuf").setLevel(logging.ERROR)
 # Pipecat uses loguru; filter out noisy "not serializable" warnings
@@ -132,8 +133,6 @@ if not os.getenv("OPENAI_BASE_URL"):
 ACE_RUNNER = None
 NEMO_RAILS = None
 NEMO_POLICY_TEXT = ""
-
-
 
 
 
@@ -420,7 +419,7 @@ if PIPECAT_AVAILABLE:
             mapped = self._LETTER_NAME_MAP.get(t.lower())
             return mapped if mapped else None
 
-        def _extract_letters(self, text: str) -> Optional[str]:
+        def _extract_letters(self, text: str, target_word: Optional[str] = None) -> Optional[str]:
             """Extract letter sequence from text like 'J-O-U-R-N-E-Y' or 'J O U R N E Y'.
 
             Also handles ASR misrecognitions where letters are transcribed as
@@ -430,20 +429,34 @@ if PIPECAT_AVAILABLE:
             if not cleaned:
                 return None
 
-            # Try splitting on dashes and/or spaces
-            tokens = self._DASH_SPLIT_RE.split(cleaned)
-            # Filter empty tokens
-            tokens = [t for t in tokens if t]
+            # Drop pure audio tags early: "(Music)" "(click)" etc
+            if re.fullmatch(r"\([^)]*\)", cleaned.strip()):
+                return None
 
+            # Whole-word fallback (kid says the word, not letters)
+            if target_word:
+                def only_letters(s: str) -> str:
+                    return re.sub(r"[^a-z]", "", s.lower())
+                if only_letters(cleaned) == only_letters(target_word) and only_letters(target_word):
+                    return only_letters(target_word).upper()
+
+            # IMPORTANT: tolerate leading words like "Thank you Q U I E T..."
+            letter_tokens = re.findall(r"\b([A-Za-z])\b", cleaned)
+            if len(letter_tokens) >= 3:
+                return "".join(letter_tokens).upper()
+
+            # Otherwise fall back to your existing dash/space logic + letter-name map
+            tokens = [t for t in self._DASH_SPLIT_RE.split(cleaned) if t]
             if len(tokens) < 2:
                 return None
 
-            # Try to normalize each token to a single letter
-            letters = [self._normalize_token(t) for t in tokens]
-            if all(l is not None for l in letters):
-                return ''.join(letters)
-
-            return None
+            letters = []
+            for t in tokens:
+                norm = self._normalize_token(t)
+                if norm is None:
+                    return None
+                letters.append(norm)
+            return "".join(letters)
 
         def _get_target_word(self) -> Optional[str]:
             """Get the current target word based on how many words have been judged."""
@@ -456,7 +469,7 @@ if PIPECAT_AVAILABLE:
 
             idx = self._review_injector._words_judged
             if idx < len(self._session_words):
-                return self._session_words[idx]
+                return self._session_words[idx].lower()
             return None
 
         def advance_review_index(self):
@@ -483,80 +496,101 @@ if PIPECAT_AVAILABLE:
                 letters = self._extract_letters(cleaned)
                 if letters:
                     target = self._get_target_word()
-                    if target:
-                        spelled = letters.upper()
-                        target_upper = target.upper()
+                    if not target:
+                        # No target word available (e.g., all words judged), skip verification
+                        await self.push_frame(frame, direction)
+                        return
+                    spelled = self._extract_letters(cleaned, target_word=target)
+                    if not spelled:
+                        spelled = letters
+                    spelled = spelled.upper()
+                    target_upper = target.upper()
 
-                        # Dedup: ASR sometimes fires duplicate finals for the same utterance
-                        verdict_key = (spelled, target_upper)
-                        if verdict_key == self._last_verdict_key:
-                            logger.debug("SpellingVerifier: skipping duplicate verdict for %s", spelled)
-                            await self.push_frame(frame, direction)
-                            return
-                        self._last_verdict_key = verdict_key
+                    # Dedup: ASR sometimes fires duplicate finals for the same utterance
+                    verdict_key = (spelled, target_upper)
+                    if verdict_key == self._last_verdict_key:
+                        logger.debug("SpellingVerifier: skipping duplicate verdict for %s", spelled)
+                        await self.push_frame(frame, direction)
+                        return
+                    self._last_verdict_key = verdict_key
 
-                        verdict = "CORRECT" if spelled == target_upper else "INCORRECT"
+                    verdict = "CORRECT" if spelled == target_upper else "INCORRECT"
 
-                        # Determine the next word so the LLM doesn't have to
-                        idx = self._review_injector._words_judged
-                        next_idx = idx + 1
+                    in_review = self._review_injector._injected
+
+                    # Compute next_word WITHOUT mutating any counters yet
+                    if in_review:
+                        review_words = get_session_incorrect_words(self._session_id)
                         next_word = (
-                            self._session_words[next_idx]
-                            if next_idx < len(self._session_words)
+                            review_words[self._review_index + 1]
+                            if review_words and (self._review_index + 1) < len(review_words)
                             else None
                         )
+                    else:
+                        idx = self._review_injector._words_judged
+                        next_idx = idx + 1
+                        next_word = self._session_words[next_idx] if next_idx < len(self._session_words) else None
 
-                        if verdict == "CORRECT":
-                            if next_word:
-                                say = f"Say EXACTLY: 'Correct! Your next word is {next_word}.'"
-                            else:
-                                say = "Say EXACTLY: 'Correct! All done!'"
+                    if verdict == "CORRECT":
+                        if next_word:
+                            say = f"Say EXACTLY: 'Correct! Your next word is {next_word}.'"
                         else:
-                            if next_word:
-                                say = (
-                                    f"Say EXACTLY: 'Not quite. The correct spelling is {target}. "
-                                    f"Your next word is {next_word}.'"
-                                )
-                            else:
-                                say = (
-                                    f"Say EXACTLY: 'Not quite. The correct spelling is {target}. "
-                                    f"All done!'"
-                                )
+                            say = "Say EXACTLY: 'Correct! All done!'"
+                    else:
+                        if next_word:
+                            say = (
+                                f"Say EXACTLY: 'Not quite. The correct spelling is {target}. "
+                                f"Your next word is {next_word}.'"
+                            )
+                        else:
+                            say = (
+                                f"Say EXACTLY: 'Not quite. The correct spelling is {target}. "
+                                f"All done!'"
+                            )
 
-                        # Remove any stale verdict messages before adding new one
-                        self._messages[:] = [
-                            m for m in self._messages
-                            if not (m.get("role") == "system"
-                                    and self._VERDICT_TAG in m.get("content", ""))
-                        ]
+                    # ✅ NOW mutate state (single source of truth)
+                    self._review_injector.notify_judgment()
 
-                        result_msg = {
-                            "role": "system",
-                            "content": (
-                                f"{self._VERDICT_TAG} "
-                                f"Verdict: {verdict}. {say} "
-                                f"Do NOT add anything else."
-                            ),
+                    if verdict == "INCORRECT":
+                        add_session_incorrect_word(self._session_id, target)
+
+                    if in_review:
+                        self.advance_review_index()
+
+                    # Remove any stale verdict messages before adding new one
+                    self._messages[:] = [
+                        m for m in self._messages
+                        if not (m.get("role") == "system"
+                                and self._VERDICT_TAG in m.get("content", ""))
+                    ]
+
+                    result_msg = {
+                        "role": "system",
+                        "content": (
+                            f"{self._VERDICT_TAG} "
+                            f"Verdict: {verdict}. {say} "
+                            f"Do NOT add anything else."
+                        ),
+                    }
+                    self._messages.append(result_msg)
+
+                    # Send verdict directly to the UI so score updates
+                    # don't depend on LLM echoing "Correct!" / "Not quite."
+                    verdict_ui = OutputTransportMessageFrame(
+                        message={
+                            "type": "spelling_verdict",
+                            "verdict": verdict.lower(),
+                            "word": target,
+                            "spelled": spelled,
+                            "next_word": next_word,
                         }
-                        self._messages.append(result_msg)
+                    )
+                    await self.push_frame(verdict_ui, direction)
 
-                        # Send verdict directly to the UI so score updates
-                        # don't depend on LLM echoing "Correct!" / "Not quite."
-                        verdict_ui = OutputTransportMessageFrame(
-                            message={
-                                "type": "spelling_verdict",
-                                "verdict": verdict.lower(),
-                                "word": target,
-                                "spelled": spelled,
-                                "next_word": next_word,
-                            }
-                        )
-                        await self.push_frame(verdict_ui, direction)
-
-                        logger.info(
-                            "SpellingVerifier: %s spelled='%s' target='%s' next='%s'",
-                            verdict, spelled, target, next_word or 'LAST',
-                        )
+                    logger.info(
+                        "SpellingVerifier: %s spelled='%s' target='%s' next='%s'",
+                        verdict, spelled, target, next_word or 'LAST',
+                    )
 
             await self.push_frame(frame, direction)
 
@@ -589,6 +623,7 @@ if PIPECAT_AVAILABLE:
             self._judged = False  # whether current word has been judged
             self._review_injector = review_injector
             self._spelling_verifier = spelling_verifier
+            self._pending_word: Optional[str] = None  # track the next word announced by LLM
 
         def _redis_add_incorrect(self, word: str):
             try:
@@ -630,11 +665,18 @@ if PIPECAT_AVAILABLE:
                 if m:
                     new_word = m.group(1).lower()
                     if new_word != self._current_word:
-                        self._current_word = new_word
-                        self._marked_incorrect = False
-                        self._judged = False  # reset for new word
+                        self._pending_word = new_word
+                        # self._current_word = new_word
+                        # self._marked_incorrect = False
+                        # self._judged = False  # reset for new word
 
             elif isinstance(frame, BotStoppedSpeakingFrame):
+                # Apply pending word change at utterance boundary
+                if self._pending_word:
+                    self._current_word = self._pending_word
+                    self._pending_word = None
+                    self._marked_incorrect = False
+                    self._judged = False
                 # Reset buffer between bot utterances
                 self._buffer = ""
 
@@ -658,6 +700,15 @@ def get_session_words(session_id: str) -> List[str]:
 def set_session_words(session_id: str, words: List[str]) -> None:
     session_wordlists[session_id] = words
     redis_client.set(f"spellingbee:session:{session_id}:words", json.dumps(words), ex=60 * 60 * 24)
+
+def add_session_incorrect_word(session_id: str, word: str) -> None:
+    """Record an incorrect word for this session (Redis set)."""
+    try:
+        key = f"spellingbee:session:{session_id}:incorrect"
+        redis_client.sadd(key, word.lower())
+        redis_client.expire(key, 60 * 60 * 24)
+    except Exception as e:
+        logger.warning("Failed to save incorrect word to Redis: %s", e)
 
 
 def get_session_incorrect_words(session_id: str) -> List[str]:
@@ -921,7 +972,7 @@ if PIPECAT_AVAILABLE:
                         confidence=0.7,
                         min_volume=0.3,
                         start_secs=0.3,
-                        stop_secs=5.0,  # 5s silence → child is done spelling
+                        stop_secs=1.6,  # 5s silence → child is done spelling
                     )
                 ),
                 audio_out_10ms_chunks=20,
@@ -949,8 +1000,14 @@ if PIPECAT_AVAILABLE:
                 # Children pause 2-3s between letters when spelling aloud.
                 # Default 1.5s finalizes the transcript too early, causing the
                 # LLM to respond before the child finishes spelling.
-                vad_silence_threshold_secs=4.0,
+                vad_silence_threshold_secs=2.0
             ),
+            language_code="eng",
+            commit_strategy="vad",
+            vad_silence_threshold_secs=2.5,   # must be 0.3–3.0
+            vad_threshold=0.35,
+            min_speech_duration_ms=80,
+            min_silence_duration_ms=120,
         )
 
         tts = ElevenLabsTTSService(
@@ -1080,7 +1137,6 @@ if PIPECAT_AVAILABLE:
                 spelling_verifier,
                 context_aggregator.user(),
                 llm,
-                incorrect_tracker,
                 md_stripper,
                 tts,
                 tts_transcript_synchronization,
