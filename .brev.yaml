@@ -1,0 +1,159 @@
+# Brev Launchable Configuration for Spelling Bee Assistant
+# An AI-powered voice coaching application using NVIDIA's full-stack AI platform
+
+name: spelling-bee-assistant
+description: AI-powered voice coaching application that turns word list images into interactive spelling practice sessions
+
+# Application metadata
+metadata:
+  version: 1.0.0
+  category: education
+  tags:
+    - ai
+    - education
+    - nvidia
+    - voice-assistant
+    - spelling
+    - pipecat
+
+# Main application configuration
+app:
+  # Primary entry point
+  port: 8080
+  protocol: http
+  
+  # Startup command
+  start_command: python spelling_bee_agent_backend.py
+  
+  # Health check endpoint
+  health_check:
+    path: /healthz
+    interval: 30s
+    timeout: 5s
+    retries: 3
+
+# Python runtime configuration
+runtime:
+  type: python
+  version: "3.12"
+  
+# Dependencies and setup
+setup:
+  # System dependencies
+  system_packages:
+    - tesseract-ocr
+    - ca-certificates
+    - git
+    - g++
+    - build-essential
+  
+  # Python dependencies
+  install_command: |
+    pip install --upgrade pip
+    pip install -r requirements.txt
+    pip install --force-reinstall --no-deps "pipecat-ai[elevenlabs]>=0.0.100"
+  
+  # Post-install patches
+  post_install: |
+    python patch_nvidia_pipecat.py $(python -c "import nvidia_pipecat; import os; print(os.path.dirname(nvidia_pipecat.__file__))")
+
+# Required environment variables
+environment:
+  required:
+    - name: ELEVENLABS_API_KEY
+      description: ElevenLabs API key for ASR and TTS services
+      secret: true
+  
+  optional:
+    - name: ELEVENLABS_TTS_VOICE_ID
+      description: ElevenLabs TTS voice identifier
+      default: "3vbrfmIQGJrswxh7ife4"
+    
+    - name: ENABLE_NEMO_GUARDRAILS
+      description: Enable NeMo Guardrails for content safety
+      default: "false"
+    
+    - name: NEMO_GUARDRAILS_CONFIG_PATH
+      description: Path to guardrails configuration
+      default: "./guardrails"
+    
+    - name: REDIS_URL
+      description: Redis connection URL for session storage
+      default: "redis://localhost:6379/0"
+    
+    - name: VLLM_VL_BASE
+      description: vLLM endpoint for vision-language model
+      default: "http://vllm-nemotron-nano-vl-8b:5566/v1"
+    
+    - name: VLLM_VL_MODEL
+      description: Vision-language model name
+      default: "nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-FP8"
+    
+    - name: NVIDIA_LLM_URL
+      description: Override LLM endpoint for voice pipeline
+      default: ""
+    
+    - name: NVIDIA_LLM_MODEL
+      description: Override LLM model for voice pipeline
+      default: ""
+
+# Service dependencies
+services:
+  # Redis for session storage
+  - name: redis
+    type: redis
+    version: "7"
+    port: 6379
+    required: true
+    description: Session storage for word lists, progress, and chat history
+
+# Resource requirements
+resources:
+  # CPU and memory
+  cpu: 2
+  memory: 4Gi
+  
+  # Optional GPU support (for vLLM model hosting)
+  gpu:
+    enabled: false
+    count: 0
+    type: any
+    note: "GPU required only if hosting vLLM model locally. By default, expects external vLLM service."
+
+# Exposed ports
+ports:
+  - port: 8080
+    protocol: http
+    description: Main application server (REST API + WebSocket)
+
+# File mounts and volumes
+volumes:
+  - path: /app/guardrails
+    description: NeMo Guardrails configuration
+    required: false
+  
+  - path: /app/ui
+    description: Web UI static files
+    required: true
+
+# Quick start guide
+quickstart:
+  steps:
+    - Set up your ElevenLabs API key as ELEVENLABS_API_KEY
+    - Ensure Redis service is running (automatically configured)
+    - Optional - Configure vLLM endpoint if using custom model hosting
+    - Launch the application
+    - Access the UI at the provided URL
+    - Upload a word list image to start a spelling session
+
+# Documentation links
+documentation:
+  readme: README.md
+  homepage: https://github.com/elizabetht/spelling-bee-assistant
+  
+# Support information
+support:
+  issues: https://github.com/elizabetht/spelling-bee-assistant/issues
+  
+# License
+license: MIT
