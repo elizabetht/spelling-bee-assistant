@@ -36,7 +36,7 @@ One click starts a real-time voice session over WebSocket. The **NVIDIA Pipecat 
 4. The transcription flows through a **server-side spelling verifier** that parses letter sequences (e.g. "J-O-U-R-N-E-Y") and determines correctness deterministically
 5. **NeMo Guardrails** enforce child-safe, on-topic conversation — the LLM won't discuss anything outside spelling practice
 6. **Nemotron-Nano** generates a warm, contextual response with the verdict
-7. **ElevenLabs TTS** speaks the response back in a natural, friendly voice
+7. **NVIDIA MagpieTTS** speaks the response back in a natural, friendly voice
 
 ### Step 3 — Score Tracking & Review
 The browser UI shows a live score bar: round number, correct/incorrect counts, and progress through the list. At the end:
@@ -64,7 +64,7 @@ The browser UI shows a live score bar: round number, correct/incorrect counts, a
 |---|---|
 | **vLLM** | High-throughput model serving with FP8 quantization on GB10 |
 | **ElevenLabs Scribe (STT)** | Streaming speech-to-text for real-time child voice transcription |
-| **ElevenLabs TTS** | Natural, friendly voice synthesis for the AI coach |
+| **NVIDIA MagpieTTS** | Natural, friendly voice synthesis for the AI coach via NVIDIA Cloud Functions |
 | **FastAPI + WebSocket** | Low-latency backend for REST image upload and real-time audio transport |
 | **Redis** | Session state: word lists, progress, incorrect word tracking (24h TTL) |
 | **Tesseract OCR** | Fallback word extraction when the VLM is unavailable |
